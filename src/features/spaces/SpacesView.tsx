@@ -14,25 +14,46 @@ interface SpacesViewProps {
   onCreateOpenChange: (open: boolean) => void
   onOpenArticle: (article: Article) => void
   onAddKnowledge: (space: string) => void
-  onCreateSpace: (space: KnowledgeSpace) => void
+  onSaveSpace: (space: KnowledgeSpace, previousName: string | null) => Promise<string | null>
+  onDeleteSpace: (name: string) => Promise<string | null>
 }
 
-export function SpacesView({ spaces, articles, role, selectedSpaceName, createOpen, onSelectSpace, onCreateOpenChange, onOpenArticle, onAddKnowledge, onCreateSpace }: SpacesViewProps) {
+export function SpacesView({ spaces, articles, role, selectedSpaceName, createOpen, onSelectSpace, onCreateOpenChange, onOpenArticle, onAddKnowledge, onSaveSpace, onDeleteSpace }: SpacesViewProps) {
   const selectedSpace = spaces.find((space) => space.name === selectedSpaceName) ?? null
   const [selectedCategory, setSelectedCategory] = useState('All categories')
   const [query, setQuery] = useState('')
   const [newSpaceName, setNewSpaceName] = useState('')
   const [newSpaceDescription, setNewSpaceDescription] = useState('')
+  const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null)
+  const [spaceError, setSpaceError] = useState('')
   const spaceArticles = useMemo(() => articles.filter((article) => article.space === selectedSpace?.name && (selectedCategory === 'All categories' || article.category === selectedCategory) && (!query || `${article.title} ${article.summary} ${article.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase()))), [articles, query, selectedCategory, selectedSpace])
-  const submitSpace = (event: FormEvent<HTMLFormElement>) => {
+  const submitSpace = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!newSpaceName.trim()) return
-    const newSpace: KnowledgeSpace = { name: newSpaceName.trim(), description: newSpaceDescription.trim() || 'A shared space for team knowledge.', color: 'green', articleCount: 0, owner: 'Atlas Admin', categories: ['Guides', 'SOPs', 'FAQs'] }
-    onCreateSpace(newSpace)
+    setSpaceError('')
+    const updatedSpace: KnowledgeSpace = { ...(editingSpace ?? { color: 'green', articleCount: 0, owner: 'Space owner', categories: [] }), name: newSpaceName.trim(), description: newSpaceDescription.trim() }
+    const error = await onSaveSpace(updatedSpace, editingSpace?.name ?? null)
+    if (error) {
+      setSpaceError(error)
+      return
+    }
     setNewSpaceName('')
     setNewSpaceDescription('')
-    onSelectSpace(newSpace.name)
-    onCreateOpenChange(false)
+    setEditingSpace(null)
+    onSelectSpace(updatedSpace.name)
+    if (!editingSpace) onCreateOpenChange(false)
+  }
+  const openSpaceEditor = (space: KnowledgeSpace) => {
+    setEditingSpace(space)
+    setNewSpaceName(space.name)
+    setNewSpaceDescription(space.description)
+    setSpaceError('')
+  }
+  const removeSpace = async (space: KnowledgeSpace) => {
+    if (!window.confirm(`Permanently delete “${space.name}” and all articles, assets, categories, and questions inside it?`)) return
+    setSpaceError('')
+    const error = await onDeleteSpace(space.name)
+    if (error) setSpaceError(error)
   }
 
   if (selectedSpace) return <section className="page-section spaces-page">

@@ -353,6 +353,26 @@ export async function createSpaceRecord(space: KnowledgeSpace) {
   return { error: null }
 }
 
+export async function saveSpaceRecord(previousName: string | null, space: KnowledgeSpace) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  if (!previousName) return createSpaceRecord(space)
+  const slug = space.name.toLowerCase().replace(/&/g, ' ').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const { error } = await supabase.from('spaces').update({ name: space.name, slug, description: space.description, color: space.color }).eq('name', previousName)
+  return { error: error?.message ?? null }
+}
+
+export async function deleteSpaceRecord(name: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { error } = await supabase.from('spaces').delete().eq('name', name)
+  return { error: error?.message ?? null }
+}
+
+export async function deleteArticleRecord(articleId: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { error } = await supabase.from('articles').delete().eq('id', articleId)
+  return { error: error?.message ?? null }
+}
+
 export async function saveQuestionChanges(previous: KnowledgeQuestion[], next: KnowledgeQuestion[]) {
   if (!supabase) return { error: 'Supabase is not configured.' }
   const { id: userId, error: userError } = await getAuthenticatedUserId()
