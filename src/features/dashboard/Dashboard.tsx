@@ -36,7 +36,7 @@ export function Dashboard({ role, userName, articles, events, onNavigate, onNewA
     { label: 'Articles', value: articles.length, detail: 'Loaded from Supabase', icon: FileText, tone: 'tone-mint' },
     { label: 'Published', value: publishedCount, detail: `${articles.length - publishedCount} other statuses`, icon: BookOpen, tone: 'tone-blue' },
     { label: 'Awaiting review', value: reviewCount, detail: 'Current review queue', icon: Clock3, tone: 'tone-peach' },
-    { label: 'Contributors', value: contributorCount, detail: `${spaceCount} spaces represented`, icon: Users, tone: 'tone-lilac' },
+    { label: 'Article owners', value: contributorCount, detail: `${spaceCount} spaces represented`, icon: Users, tone: 'tone-lilac' },
   ]
   return <section className="page-section dashboard-page"><div className="page-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />{role === 'Super Admin' ? getTodayLabel(currentDate) : dashboardCopy[role].eyebrow}</div><h1>{getGreeting(currentDate)}, {userName || 'there'}<span className="greeting-period">.</span></h1><p>{dashboardCopy[role].description}</p></div><div className="heading-actions"><Button variant="outline" onClick={() => onNavigate('library')}><BookOpen size={15} />Browse library</Button>{role !== 'Viewer' && <Button onClick={onNewArticle}><Plus size={16} />Add knowledge</Button>}</div></div>
     {role === 'Viewer' && <button className="answer-banner" type="button" onClick={() => onNavigate('questions')}><div className="answer-icon"><Sparkles size={17} /></div><div><strong>Looking for something specific?</strong><span>Ask Atlas to find a trusted answer across your workspace.</span></div><ArrowRight size={17} /> </button>}

@@ -327,8 +327,8 @@ function App() {
     })
   }, [selectedArticleId, selectedArticleBody, authUserId])
 
-  const addEvent = (_actor: string, action: string, target: string, type: AuditEvent['type']) => {
-    void recordAuditEvent(action, target, type).then(({ data, error }) => {
+  const addEvent = (actor: string, action: string, target: string, type: AuditEvent['type']) => {
+    void recordAuditEvent(actor, action, target, type).then(({ data, error }) => {
       if (data) setAuditEvents((current) => [data, ...current])
       else if (error) setWorkspaceDataError(error)
     })
@@ -355,7 +355,7 @@ function App() {
     if (error || !data) return error ?? 'The file could not be uploaded.'
     setKnowledgeAssets((current) => [data, ...current])
     setIsAssetOpen(false)
-    addEvent('Current user', 'Added knowledge asset', asset.name, 'Content')
+    addEvent(currentUserName, 'Added knowledge asset', asset.name, 'Content')
     setActiveView('models')
     return null
   }
@@ -367,7 +367,7 @@ function App() {
     }
     setKnowledgeIntegrations((current) => [integration, ...current])
     setIsSourceOpen(false)
-    addEvent('Atlas Admin', 'Added source connector', integration.name, 'Workspace')
+    addEvent(currentUserName, 'Added source connector', integration.name, 'Workspace')
     setActiveView('models')
   }
   const addTaxonomyTerm = async (term: string) => {
@@ -378,7 +378,7 @@ function App() {
       return
     }
     setTaxonomyTerms((current) => [...current, term])
-    addEvent('Atlas Admin', 'Added taxonomy term', `#${term}`, 'Workspace')
+    addEvent(currentUserName, 'Added taxonomy term', `#${term}`, 'Workspace')
   }
   const changeWorkspaceSettings = async (nextSettings: WorkspaceSettings) => {
     const { error } = await persistWorkspaceSettings(nextSettings)
@@ -442,7 +442,7 @@ function App() {
     }
     const version: ArticleVersion = { id: crypto.randomUUID(), title: selectedArticle.title, body, status: selectedArticle.status, author: selectedArticle.owner, savedAt: formatTimestamp() }
     updateArticle(selectedArticle.id, (article) => ({ ...article, body, versions: [version, ...(article.versions ?? [])] }))
-    addEvent('Atlas Admin', 'Saved version', selectedArticle.title, 'Content')
+    addEvent(currentUserName, 'Saved version', selectedArticle.title, 'Content')
     return true
   }
   const changeArticleStatus = async (status: ArticleStatus) => {
@@ -454,7 +454,7 @@ function App() {
       return false
     }
     updateArticle(selectedArticle.id, () => updatedArticle)
-    addEvent('Atlas Admin', `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
+    addEvent(currentUserName, `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
     return true
   }
   const addArticleComment = async (comment: ArticleComment) => {
@@ -485,7 +485,7 @@ function App() {
       return false
     }
     updateArticle(selectedArticle.id, () => updatedArticle)
-    addEvent('Atlas Admin', 'Restored version', selectedArticle.title, 'Content')
+    addEvent(currentUserName, 'Restored version', selectedArticle.title, 'Content')
     return true
   }
   const removeArticle = async () => {
@@ -654,7 +654,7 @@ function App() {
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
         {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsPageLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
-        {effectiveView === 'analytics' && <AnalyticsView articles={articles} currentUserName={currentUserName} zeroResultQueries={zeroResultQueries} loading={searchGapsPageLoading} />}
+        {effectiveView === 'analytics' && <AnalyticsView articles={articles} role={role} currentUserName={currentUserName} zeroResultQueries={zeroResultQueries} loading={searchGapsPageLoading} />}
         {effectiveView === 'people' && (adminPageLoading ? <div className="page-loading" role="status">Loading workspace members…</div> : <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
         {effectiveView === 'settings' && (settingsPageLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
         {effectiveView === 'audit' && (adminPageLoading ? <div className="page-loading" role="status">Loading audit events…</div> : <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
@@ -667,7 +667,7 @@ function App() {
   </div>
 }
 
-function AnalyticsView({ articles, currentUserName, zeroResultQueries, loading }: { articles: Article[]; currentUserName: string; zeroResultQueries: string[]; loading: boolean }) {
+function AnalyticsView({ articles, role, currentUserName, zeroResultQueries, loading }: { articles: Article[]; role: Role; currentUserName: string; zeroResultQueries: string[]; loading: boolean }) {
   const statuses = ['Published', 'Under review', 'Draft', 'Archived'].map((status) => ({
     label: status,
     count: articles.filter((article) => article.status === status).length,
@@ -678,7 +678,7 @@ function AnalyticsView({ articles, currentUserName, zeroResultQueries, loading }
     <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
     <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
       <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? 'Loading…' : `${zeroResultQueries.length} total`}</span></div>{loading ? <div className="empty-state">Loading search activity…</div> : zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{!loading && zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
-    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role="Super Admin" currentUserName={currentUserName} title="" description="" compact />
+    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role={role} currentUserName={currentUserName} title="" description="" compact />
   </section>
 }
 

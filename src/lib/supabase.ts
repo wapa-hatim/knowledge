@@ -700,7 +700,7 @@ export async function createTaxonomyTerm(name: string) {
   return { error: error?.message ?? null }
 }
 
-export async function recordAuditEvent(action: string, target: string, type: AuditEvent['type']) {
+export async function recordAuditEvent(actorName: string, action: string, target: string, type: AuditEvent['type']) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
   const { id: userId, error: userError } = await getAuthenticatedUserId()
   if (userError || !userId) return { data: null, error: userError }
@@ -715,7 +715,7 @@ export async function recordAuditEvent(action: string, target: string, type: Aud
   return {
     data: {
       id: data.id,
-      actor: 'You',
+      actor: actorName,
       action,
       target,
       date: new Date(data.created_at).toLocaleString(),
