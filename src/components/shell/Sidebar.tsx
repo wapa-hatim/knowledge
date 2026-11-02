@@ -27,10 +27,28 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeView, onNavigate, role, spaces, onOpenSpace, onCreateSpace }: SidebarProps) {
-  const [spacesExpanded, setSpacesExpanded] = useState(false)
+  const [spacesExpanded, setSpacesExpanded] = useState(true)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
 
   return <aside className="sidebar"><div className="brand-lockup"><div className="brand-mark"><BookOpenCheck size={19} /></div><span>atlas<span className="brand-period">.</span></span></div>
-    <button className="workspace-switcher" type="button" aria-label="Current workspace: Atlas Knowledge"><span className="workspace-avatar">A</span><span className="workspace-name"><strong>Atlas Knowledge</strong><small>Knowledge workspace</small></span><span className="workspace-chevron">⌄</span></button>
+    <details className="workspace-menu" open={workspaceMenuOpen} onToggle={(event) => setWorkspaceMenuOpen(event.currentTarget.open)}>
+      <summary className="workspace-switcher" aria-label="Current workspace: Atlas Knowledge">
+        <span className="workspace-avatar">A</span>
+        <span className="workspace-name"><strong>Atlas Knowledge</strong><small>Knowledge workspace</small></span>
+        <span className="workspace-chevron"><ChevronDown size={14} /></span>
+      </summary>
+      <div className="workspace-menu-panel">
+        <button type="button" className="workspace-option active" onClick={() => { onNavigate('overview'); setWorkspaceMenuOpen(false) }}>
+          <span className="workspace-option-label">Atlas Knowledge</span>
+          <span className="workspace-option-pill">Workspace</span>
+        </button>
+        {spaces.map((space) => <button type="button" className="workspace-option" key={space.name} onClick={() => { onOpenSpace(space.name); setWorkspaceMenuOpen(false) }}>
+          <span className="workspace-option-label">{space.name}</span>
+          <span className="workspace-option-dot" style={{ background: space.color === 'green' ? '#66b98a' : space.color === 'orange' ? '#d89c5f' : space.color === 'blue' ? '#73a7d1' : space.color === 'pink' ? '#d38ec0' : '#8f87c9' }} />
+        </button>)}
+        {role === 'Super Admin' && <button type="button" className="workspace-option create-option" onClick={() => { onCreateSpace(); setWorkspaceMenuOpen(false) }}><span className="workspace-option-label">Create space</span><span className="workspace-option-plus">+</span></button>}
+      </div>
+    </details>
     <div className="sidebar-label">WORKSPACE</div><nav className="sidebar-nav" aria-label="Workspace navigation">{navigation.filter((item) => !item.roles || item.roles.includes(role)).map((item) => { const Icon = item.icon; return <button className={`nav-link${activeView === item.view ? ' active' : ''}`} key={item.view} onClick={() => onNavigate(item.view)} type="button" aria-current={activeView === item.view ? 'page' : undefined}><Icon size={17} /><span>{item.label}</span>{item.count && <span className="nav-count">{item.count}</span>}</button> })}</nav>
     {administration.some((item) => item.roles.includes(role)) && <><div className="sidebar-label administration-label">ADMINISTRATION</div><nav className="sidebar-nav" aria-label="Administration">{administration.filter((item) => item.roles.includes(role)).map((item) => { const Icon = item.icon; return <button className={`nav-link${activeView === item.view ? ' active' : ''}`} key={item.view} onClick={() => onNavigate(item.view)} type="button" aria-current={activeView === item.view ? 'page' : undefined}><Icon size={17} /><span>{item.label}</span></button> })}</nav></>}
     <div className={`sidebar-spaces${spacesExpanded ? ' expanded' : ''}`}>

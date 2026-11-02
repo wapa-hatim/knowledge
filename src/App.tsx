@@ -40,7 +40,24 @@ const createArticleVersionId = () => `V-${Date.now()}`
 const formatTimestamp = () => new Date().toLocaleString()
 const resolveRoleFromMetadata = (role: unknown): Role => {
   const allowedRoles: Role[] = ['Super Admin', 'Space Admin', 'Author', 'Reviewer', 'Viewer']
-  return typeof role === 'string' && allowedRoles.includes(role as Role) ? role as Role : 'Viewer'
+  const normalized = typeof role === 'string' ? role.trim() : ''
+  if (!normalized) return 'Viewer'
+
+  const normalizedKey = normalized.toLowerCase().replace(/[^a-z]+/g, ' ').trim()
+  const aliases: Record<string, Role> = {
+    'super admin': 'Super Admin',
+    'space admin': 'Space Admin',
+    'author': 'Author',
+    'reviewer': 'Reviewer',
+    'viewer': 'Viewer',
+    'super admin admin': 'Super Admin',
+    'space admin admin': 'Space Admin',
+  }
+
+  if (allowedRoles.includes(normalized as Role)) return normalized as Role
+  if (aliases[normalizedKey]) return aliases[normalizedKey]
+
+  return 'Viewer'
 }
 
 function App() {
