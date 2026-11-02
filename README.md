@@ -25,6 +25,16 @@
 
 The role is read from `public.profiles`. Create the auth user before applying the migration or afterward; the migration backfills existing users, and the auth trigger creates profiles for future users. Do not expose the database password or Supabase secret/service-role key to the browser.
 
+### Seed development accounts
+
+After the migration is pushed, copy `.env.seed.example` to `.env.seed.local` and fill in the project URL, server-only secret key, and five unique passwords (at least 14 characters). This file is ignored by Git. Then run:
+
+```sh
+npm run seed:users
+```
+
+The script creates or updates `admin@atlas.com` as Super Admin, plus Space Admin, Author, Reviewer, and Viewer accounts with corresponding space memberships. It never prints passwords. Rerunning it resets each seeded account to the password currently in `.env.seed.local`.
+
 The file upload dialog now uploads objects to private Supabase Storage and inserts asset metadata. Other workspace screens still use browser-local state until their data operations are migrated to Supabase.
 
 ## Local commands

@@ -1,7 +1,7 @@
 create extension if not exists pgcrypto with schema extensions;
 create extension if not exists vector with schema extensions;
 
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text not null unique,
   display_name text not null default '',
@@ -11,7 +11,7 @@ create table public.profiles (
   updated_at timestamptz not null default now()
 );
 
-create table public.spaces (
+create table if not exists public.spaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
@@ -25,7 +25,7 @@ create table public.spaces (
   unique (parent_id, name)
 );
 
-create table public.space_members (
+create table if not exists public.space_members (
   space_id uuid not null references public.spaces (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   role text not null default 'Member' check (role in ('Space Admin', 'Member')),
@@ -34,7 +34,7 @@ create table public.space_members (
   primary key (space_id, user_id)
 );
 
-create table public.categories (
+create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
   space_id uuid not null references public.spaces (id) on delete cascade,
   name text not null,
@@ -43,7 +43,7 @@ create table public.categories (
   unique (space_id, parent_id, name)
 );
 
-create table public.articles (
+create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),
   space_id uuid not null references public.spaces (id) on delete cascade,
   category_id uuid references public.categories (id) on delete set null,
@@ -57,16 +57,14 @@ create table public.articles (
   visibility text not null default 'members' check (visibility in ('members', 'workspace')),
   tags text[] not null default '{}',
   view_count bigint not null default 0 check (view_count >= 0),
-  search_document tsvector generated always as (
-    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(body, '') || ' ' || array_to_string(tags, ' '))
-  ) stored,
+  search_document tsvector not null default ''::tsvector,
   review_due_at timestamptz,
   published_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.article_versions (
+create table if not exists public.article_versions (
   id uuid primary key default gen_random_uuid(),
   article_id uuid not null references public.articles (id) on delete cascade,
   title text not null,
@@ -76,7 +74,7 @@ create table public.article_versions (
   created_at timestamptz not null default now()
 );
 
-create table public.article_comments (
+create table if not exists public.article_comments (
   id uuid primary key default gen_random_uuid(),
   article_id uuid not null references public.articles (id) on delete cascade,
   author_id uuid not null references public.profiles (id) on delete restrict,
@@ -87,7 +85,7 @@ create table public.article_comments (
   updated_at timestamptz not null default now()
 );
 
-create table public.article_feedback (
+create table if not exists public.article_feedback (
   article_id uuid not null references public.articles (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   helpful boolean not null,
@@ -96,14 +94,14 @@ create table public.article_feedback (
   primary key (article_id, user_id)
 );
 
-create table public.bookmarks (
+create table if not exists public.bookmarks (
   user_id uuid not null references public.profiles (id) on delete cascade,
   article_id uuid not null references public.articles (id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (user_id, article_id)
 );
 
-create table public.knowledge_assets (
+create table if not exists public.knowledge_assets (
   id uuid primary key default gen_random_uuid(),
   space_id uuid not null references public.spaces (id) on delete cascade,
   uploaded_by uuid not null references public.profiles (id) on delete restrict,
@@ -114,15 +112,13 @@ create table public.knowledge_assets (
   byte_size bigint not null check (byte_size >= 0),
   extracted_text text not null default '',
   tags text[] not null default '{}',
-  search_document tsvector generated always as (
-    to_tsvector('english', coalesce(name, '') || ' ' || coalesce(extracted_text, '') || ' ' || array_to_string(tags, ' '))
-  ) stored,
+  search_document tsvector not null default ''::tsvector,
   status text not null default 'Processing' check (status in ('Indexed', 'Processing', 'Synced', 'Failed')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.knowledge_questions (
+create table if not exists public.knowledge_questions (
   id uuid primary key default gen_random_uuid(),
   space_id uuid not null references public.spaces (id) on delete cascade,
   author_id uuid not null references public.profiles (id) on delete restrict,
@@ -134,7 +130,7 @@ create table public.knowledge_questions (
   updated_at timestamptz not null default now()
 );
 
-create table public.question_answers (
+create table if not exists public.question_answers (
   id uuid primary key default gen_random_uuid(),
   question_id uuid not null references public.knowledge_questions (id) on delete cascade,
   author_id uuid not null references public.profiles (id) on delete restrict,
@@ -145,24 +141,26 @@ create table public.question_answers (
 );
 
 alter table public.knowledge_questions
+  drop constraint if exists knowledge_questions_accepted_answer_fk;
+alter table public.knowledge_questions
   add constraint knowledge_questions_accepted_answer_fk
   foreign key (accepted_answer_id) references public.question_answers (id) on delete set null;
 
-create table public.question_votes (
+create table if not exists public.question_votes (
   question_id uuid not null references public.knowledge_questions (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (question_id, user_id)
 );
 
-create table public.answer_votes (
+create table if not exists public.answer_votes (
   answer_id uuid not null references public.question_answers (id) on delete cascade,
   user_id uuid not null references public.profiles (id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (answer_id, user_id)
 );
 
-create table public.taxonomy_terms (
+create table if not exists public.taxonomy_terms (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   description text not null default '',
@@ -170,13 +168,13 @@ create table public.taxonomy_terms (
   created_at timestamptz not null default now()
 );
 
-create table public.article_taxonomy_terms (
+create table if not exists public.article_taxonomy_terms (
   article_id uuid not null references public.articles (id) on delete cascade,
   term_id uuid not null references public.taxonomy_terms (id) on delete cascade,
   primary key (article_id, term_id)
 );
 
-create table public.knowledge_models (
+create table if not exists public.knowledge_models (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   format text not null,
@@ -190,7 +188,7 @@ create table public.knowledge_models (
   updated_at timestamptz not null default now()
 );
 
-create table public.knowledge_integrations (
+create table if not exists public.knowledge_integrations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text not null default '',
@@ -201,7 +199,7 @@ create table public.knowledge_integrations (
   created_at timestamptz not null default now()
 );
 
-create table public.integration_sync_logs (
+create table if not exists public.integration_sync_logs (
   id uuid primary key default gen_random_uuid(),
   integration_id uuid not null references public.knowledge_integrations (id) on delete cascade,
   status text not null check (status in ('Started', 'Succeeded', 'Failed')),
@@ -211,7 +209,7 @@ create table public.integration_sync_logs (
   completed_at timestamptz
 );
 
-create table public.audit_events (
+create table if not exists public.audit_events (
   id uuid primary key default gen_random_uuid(),
   actor_id uuid references public.profiles (id) on delete set null,
   action text not null,
@@ -221,7 +219,7 @@ create table public.audit_events (
   created_at timestamptz not null default now()
 );
 
-create table public.search_queries (
+create table if not exists public.search_queries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.profiles (id) on delete set null,
   query text not null,
@@ -229,14 +227,14 @@ create table public.search_queries (
   created_at timestamptz not null default now()
 );
 
-create table public.workspace_settings (
+create table if not exists public.workspace_settings (
   key text primary key,
   value jsonb not null default '{}'::jsonb,
   updated_by uuid references public.profiles (id) on delete set null,
   updated_at timestamptz not null default now()
 );
 
-create table public.knowledge_chunks (
+create table if not exists public.knowledge_chunks (
   id uuid primary key default gen_random_uuid(),
   article_id uuid references public.articles (id) on delete cascade,
   asset_id uuid references public.knowledge_assets (id) on delete cascade,
@@ -249,18 +247,44 @@ create table public.knowledge_chunks (
   check (article_id is not null or asset_id is not null)
 );
 
-create index articles_space_status_updated_idx on public.articles (space_id, status, updated_at desc);
-create index articles_tags_idx on public.articles using gin (tags);
-create index articles_search_document_idx on public.articles using gin (search_document);
-create index knowledge_assets_space_created_idx on public.knowledge_assets (space_id, created_at desc);
-create index knowledge_assets_search_document_idx on public.knowledge_assets using gin (search_document);
-create index questions_space_created_idx on public.knowledge_questions (space_id, created_at desc);
-create index audit_events_created_idx on public.audit_events (created_at desc);
-create index search_queries_created_idx on public.search_queries (created_at desc);
-create index knowledge_chunks_space_idx on public.knowledge_chunks (space_id);
-create index knowledge_chunks_embedding_idx on public.knowledge_chunks using hnsw (embedding vector_cosine_ops);
+do $$
+begin
+  if exists (
+    select 1 from pg_attribute
+    where attrelid = 'public.articles'::regclass
+      and attname = 'search_document'
+      and attgenerated = 's'
+  ) then
+    alter table public.articles alter column search_document drop expression;
+  end if;
+  if exists (
+    select 1 from pg_attribute
+    where attrelid = 'public.knowledge_assets'::regclass
+      and attname = 'search_document'
+      and attgenerated = 's'
+  ) then
+    alter table public.knowledge_assets alter column search_document drop expression;
+  end if;
+end;
+$$;
 
-create function public.set_updated_at()
+alter table public.articles add column if not exists search_document tsvector not null default ''::tsvector;
+alter table public.knowledge_assets add column if not exists search_document tsvector not null default ''::tsvector;
+alter table public.articles alter column search_document set default ''::tsvector;
+alter table public.knowledge_assets alter column search_document set default ''::tsvector;
+
+create index if not exists articles_space_status_updated_idx on public.articles (space_id, status, updated_at desc);
+create index if not exists articles_tags_idx on public.articles using gin (tags);
+create index if not exists articles_search_document_idx on public.articles using gin (search_document);
+create index if not exists knowledge_assets_space_created_idx on public.knowledge_assets (space_id, created_at desc);
+create index if not exists knowledge_assets_search_document_idx on public.knowledge_assets using gin (search_document);
+create index if not exists questions_space_created_idx on public.knowledge_questions (space_id, created_at desc);
+create index if not exists audit_events_created_idx on public.audit_events (created_at desc);
+create index if not exists search_queries_created_idx on public.search_queries (created_at desc);
+create index if not exists knowledge_chunks_space_idx on public.knowledge_chunks (space_id);
+create index if not exists knowledge_chunks_embedding_idx on public.knowledge_chunks using hnsw (embedding vector_cosine_ops);
+
+create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
 set search_path = public, pg_temp
@@ -271,16 +295,61 @@ begin
 end;
 $$;
 
+create or replace function public.refresh_article_search_document()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.search_document := to_tsvector(
+    'english'::regconfig,
+    coalesce(new.title, '') || ' ' || coalesce(new.summary, '') || ' ' || coalesce(new.body, '') || ' ' || array_to_string(new.tags, ' ')
+  );
+  return new;
+end;
+$$;
+
+create or replace function public.refresh_asset_search_document()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.search_document := to_tsvector(
+    'english'::regconfig,
+    coalesce(new.name, '') || ' ' || coalesce(new.extracted_text, '') || ' ' || array_to_string(new.tags, ' ')
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists articles_refresh_search_document on public.articles;
+create trigger articles_refresh_search_document
+  before insert or update of title, summary, body, tags on public.articles
+  for each row execute function public.refresh_article_search_document();
+drop trigger if exists knowledge_assets_refresh_search_document on public.knowledge_assets;
+create trigger knowledge_assets_refresh_search_document
+  before insert or update of name, extracted_text, tags on public.knowledge_assets
+  for each row execute function public.refresh_asset_search_document();
+
+drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles for each row execute function public.set_updated_at();
+drop trigger if exists spaces_set_updated_at on public.spaces;
 create trigger spaces_set_updated_at before update on public.spaces for each row execute function public.set_updated_at();
+drop trigger if exists articles_set_updated_at on public.articles;
 create trigger articles_set_updated_at before update on public.articles for each row execute function public.set_updated_at();
+drop trigger if exists article_comments_set_updated_at on public.article_comments;
 create trigger article_comments_set_updated_at before update on public.article_comments for each row execute function public.set_updated_at();
+drop trigger if exists knowledge_questions_set_updated_at on public.knowledge_questions;
 create trigger knowledge_questions_set_updated_at before update on public.knowledge_questions for each row execute function public.set_updated_at();
+drop trigger if exists question_answers_set_updated_at on public.question_answers;
 create trigger question_answers_set_updated_at before update on public.question_answers for each row execute function public.set_updated_at();
+drop trigger if exists knowledge_assets_set_updated_at on public.knowledge_assets;
 create trigger knowledge_assets_set_updated_at before update on public.knowledge_assets for each row execute function public.set_updated_at();
+drop trigger if exists knowledge_models_set_updated_at on public.knowledge_models;
 create trigger knowledge_models_set_updated_at before update on public.knowledge_models for each row execute function public.set_updated_at();
 
-create function public.create_profile_for_new_user()
+create or replace function public.create_profile_for_new_user()
 returns trigger
 language plpgsql
 security definer
@@ -294,6 +363,7 @@ begin
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.create_profile_for_new_user();
@@ -322,9 +392,13 @@ cross join lateral unnest(case s.slug
   when 'customer-success' then array['Playbooks', 'FAQs', 'Handoffs', 'Troubleshooting']
   when 'security' then array['SOPs', 'Access', 'Compliance', 'Incident response']
   else array[]::text[] end) as category(name)
+where not exists (
+  select 1 from public.categories existing
+  where existing.space_id = s.id and existing.name = category.name and existing.parent_id is null
+)
 on conflict (space_id, parent_id, name) do nothing;
 
-create function public.current_workspace_role()
+create or replace function public.current_workspace_role()
 returns text
 language sql
 stable
@@ -334,7 +408,7 @@ as $$
   select coalesce((select p.role from public.profiles p where p.id = auth.uid()), 'Viewer');
 $$;
 
-create function public.is_workspace_admin()
+create or replace function public.is_workspace_admin()
 returns boolean
 language sql
 stable
@@ -344,7 +418,7 @@ as $$
   select public.current_workspace_role() = 'Super Admin';
 $$;
 
-create function public.is_space_member(target_space_id uuid)
+create or replace function public.is_space_member(target_space_id uuid)
 returns boolean
 language sql
 stable
@@ -360,7 +434,7 @@ as $$
   );
 $$;
 
-create function public.can_manage_space(target_space_id uuid)
+create or replace function public.can_manage_space(target_space_id uuid)
 returns boolean
 language sql
 stable
@@ -397,6 +471,43 @@ alter table public.audit_events enable row level security;
 alter table public.search_queries enable row level security;
 alter table public.workspace_settings enable row level security;
 alter table public.knowledge_chunks enable row level security;
+
+do $$
+declare
+  existing_policy record;
+begin
+  for existing_policy in
+    select schemaname, tablename, policyname
+    from pg_policies
+    where (schemaname = 'public' and policyname = any (array[
+      'profiles_select', 'profiles_update',
+      'spaces_select', 'spaces_insert', 'spaces_update', 'spaces_delete',
+      'space_members_select', 'space_members_admin_all',
+      'categories_select', 'categories_manage',
+      'articles_select', 'articles_insert', 'articles_update', 'articles_delete',
+      'article_versions_select', 'article_versions_insert',
+      'article_comments_select', 'article_comments_insert', 'article_comments_update_own', 'article_comments_delete_own',
+      'article_feedback_self', 'bookmarks_self',
+      'knowledge_assets_select', 'knowledge_assets_insert', 'knowledge_assets_update', 'knowledge_assets_delete',
+      'questions_select', 'questions_insert', 'questions_update', 'questions_delete',
+      'answers_select', 'answers_insert', 'answers_update', 'answers_delete',
+      'question_votes_self', 'answer_votes_self',
+      'taxonomy_terms_select', 'taxonomy_terms_manage', 'article_taxonomy_select', 'article_taxonomy_manage',
+      'knowledge_models_select', 'knowledge_models_manage',
+      'integrations_admin_all', 'integration_logs_admin_select', 'integration_logs_admin_insert',
+      'audit_events_admin_select', 'audit_events_insert_actor',
+      'search_queries_insert_self', 'search_queries_admin_select',
+      'workspace_settings_select', 'workspace_settings_manage',
+      'knowledge_chunks_select', 'knowledge_chunks_manage'
+    ]::text[]))
+    or (schemaname = 'storage' and tablename = 'objects' and policyname = any (array[
+      'knowledge_objects_select', 'knowledge_objects_insert', 'knowledge_objects_update', 'knowledge_objects_delete'
+    ]::text[]))
+  loop
+    execute format('drop policy if exists %I on %I.%I', existing_policy.policyname, existing_policy.schemaname, existing_policy.tablename);
+  end loop;
+end;
+$$;
 
 create policy profiles_select on public.profiles for select to authenticated using (id = auth.uid() or public.is_workspace_admin());
 create policy profiles_update on public.profiles for update to authenticated using (id = auth.uid() or public.is_workspace_admin()) with check (id = auth.uid() or public.is_workspace_admin());
