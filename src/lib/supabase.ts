@@ -849,16 +849,17 @@ export async function getCurrentWorkspaceRole(authenticatedUserId?: string) {
     if (userError || !userData.user) return { role: null, error: userError?.message ?? 'No authenticated user.' }
     userId = userData.user.id
   }
+  const resolvedUserId = userId
 
   const { data, error } = await supabase
     .from('profiles')
     .select('role, display_name, status')
-    .eq('id', userId)
+    .eq('id', resolvedUserId)
     .single()
 
   if (error) return { role: null, error: error.message }
   if (data.status !== 'Active') return { role: null, error: 'Your workspace account is not active.' }
-  return { role: data.role as string, userId: userData.user.id, userName: data.display_name || userData.user.email?.split('@')[0] || 'Workspace member', error: null }
+  return { role: data.role as string, userId: resolvedUserId, userName: data.display_name || 'Workspace member', error: null }
 }
 
 function fileSizeLabel(bytes: number) {

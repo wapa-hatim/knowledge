@@ -156,7 +156,7 @@ function App() {
       if (activeUserIdRef.current === session.user.id) return
       if (activeUserIdRef.current && activeUserIdRef.current !== session.user.id) clearWorkspace()
       activeUserIdRef.current = session.user.id
-      const { role: profileRole, userId, userName, error } = await getCurrentWorkspaceRole()
+      const { role: profileRole, userId, userName, error } = await getCurrentWorkspaceRole(session.user.id)
       if (!isMountedRef.current || activeUserIdRef.current !== session.user.id) return
       if (error || !profileRole || !userId) {
         activeUserIdRef.current = null
@@ -584,7 +584,7 @@ function App() {
         setResetNotice(error ?? 'Unable to sign in. Please try again.')
         return
       }
-      const { role: profileRole, error: profileError } = await getCurrentWorkspaceRole()
+      const { role: profileRole, error: profileError } = await getCurrentWorkspaceRole(data.user.id)
       if (profileError || !profileRole) {
         await signOut()
         setResetNotice(profileError ?? 'Your workspace profile is not set up yet. Ask an administrator to provision your account.')
