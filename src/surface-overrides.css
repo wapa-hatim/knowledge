@@ -1,0 +1,43 @@
+input:not([type='checkbox']):not([type='radio']),
+textarea,
+select {
+  background-color: #fff;
+}
+
+.global-search,
+.table-search {
+  background-color: #fff;
+}
+
+.knowledge-table .table-article-button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.comment-compose,
+.comment-compose input,
+.knowledge-table .table-article-button,
+.knowledge-table .table-article-button:hover,
+.knowledge-table .table-article-button:focus,
+.knowledge-table .table-article-button:active {
+  background-color: #fff;
+}
+
+.knowledge-table tbody tr,
+.knowledge-table tbody td,
+.knowledge-table tbody tr:hover,
+.search-result-row:hover,
+.space-article-row:hover,
+.question-list-button:hover {
+  background-color: #fff;
+}
+
+.admin-status {
+  background-color: #fff;
+}
+
+.admin-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
