@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { AuditEvent, WorkspaceUser } from '../types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? ''
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
@@ -15,6 +16,69 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       },
     })
   : null
+
+export interface WorkspaceAdminData {
+  users: WorkspaceUser[]
+  events: AuditEvent[]
+  spaces: string[]
+}
+
+export async function loadWorkspaceAdminData() {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+
+  const [profilesResult, membershipsResult, spacesResult, eventsResult] = await Promise.all([
+    supabase.from('profiles').select('id, email, display_name, department, role, status').order('display_name'),
+    supabase.from('space_members').select('user_id, space_id, created_at').order('created_at'),
+    supabase.from('spaces').select('id, name').order('name'),
+    supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(200),
+  ])
+
+  const queryError = profilesResult.error ?? membershipsResult.error ?? spacesResult.error ?? eventsResult.error
+  if (queryError) return { data: null, error: queryError.message }
+
+  const spacesById = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
+  const membershipsByUser = new Map<string, string[]>()
+  for (const membership of membershipsResult.data ?? []) {
+    const spaceName = spacesById.get(membership.space_id)
+    if (!spaceName) continue
+    membershipsByUser.set(membership.user_id, [...(membershipsByUser.get(membership.user_id) ?? []), spaceName])
+  }
+
+  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]))
+  const users: WorkspaceUser[] = (profilesResult.data ?? []).map((profile) => ({
+    id: profile.id,
+    name: profile.display_name || profile.email.split('@')[0],
+    email: profile.email,
+    department: profile.department,
+    role: profile.role as WorkspaceUser['role'],
+    status: profile.status as WorkspaceUser['status'],
+    space: membershipsByUser.get(profile.id)?.[0] ?? 'All spaces',
+  }))
+
+  const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => {
+    const details = event.details as { target?: string } | null
+    const eventType = event.target_type === 'Content' || event.target_type === 'Access' ? event.target_type : 'Workspace'
+    return {
+      id: event.id,
+      actor: event.actor_id ? profilesById.get(event.actor_id)?.display_name || 'Workspace member' : 'System',
+      action: event.action,
+      target: details?.target || event.target_id,
+      date: new Date(event.created_at).toLocaleString(),
+      type: eventType,
+    }
+  })
+
+  return { data: { users, events, spaces: (spacesResult.data ?? []).map((space) => space.name) } satisfies WorkspaceAdminData, error: null }
+}
+
+export async function manageWorkspaceUser(
+  action: 'invite' | 'update' | 'status' | 'delete',
+  payload: { member?: Partial<WorkspaceUser>; userId?: string; status?: WorkspaceUser['status'] },
+) {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.functions.invoke('manage-workspace-user', { body: { action, ...payload } })
+  return { data, error: error?.message ?? null }
+}
 
 export async function signInWithEmail(email: string, password: string) {
   if (!email.trim() || !password.trim()) {

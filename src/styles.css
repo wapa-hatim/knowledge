@@ -19,8 +19,6 @@ select {
   font-size: 13px;
   transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
-select:hover { border-color: #bfd4c5; background-color: #fbfdfc; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #a8d7c6; outline-offset: 2px; }
 select:hover { border-color: #a1a1aa; background-color: #fff; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #a1a1aa; outline-offset: 2px; }
 ::selection { color: #183c33; background: #cbe8dc; }

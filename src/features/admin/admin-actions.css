@@ -1,0 +1,44 @@
+.table-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.table-action-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid #e4e4e7;
+  border-radius: 5px;
+  color: #52525b;
+  background: #fff;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.table-action-button:hover:not(:disabled) {
+  border-color: #a1a1aa;
+  color: #18181b;
+  background: #f4f4f5;
+}
+
+.table-action-button:disabled {
+  cursor: wait;
+  opacity: .5;
+}
+
+.table-action-danger:hover:not(:disabled) {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.admin-data-error {
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #991b1b;
+  background: #fef2f2;
+  font-size: 12px;
+}

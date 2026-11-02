@@ -13,8 +13,8 @@ const navigation: { label: string; view: View; icon: LucideIcon; roles?: Role[];
   { label: 'Analytics', view: 'analytics', icon: ChartNoAxesCombined, roles: ['Super Admin', 'Space Admin'] },
 ]
 const administration: { label: string; view: View; icon: LucideIcon; roles: Role[] }[] = [
-  { label: 'People & permissions', view: 'people', icon: Users, roles: ['Super Admin', 'Space Admin'] },
-  { label: 'Workspace settings', view: 'settings', icon: Settings2, roles: ['Super Admin', 'Space Admin'] },
+  { label: 'People & permissions', view: 'people', icon: Users, roles: ['Super Admin'] },
+  { label: 'Workspace settings', view: 'settings', icon: Settings2, roles: ['Super Admin'] },
   { label: 'Audit trail', view: 'audit', icon: ScrollText, roles: ['Super Admin'] },
 ]
 interface SidebarProps {

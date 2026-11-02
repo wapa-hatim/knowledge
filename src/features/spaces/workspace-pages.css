@@ -1,5 +1,5 @@
-.admin-select, .admin-status { max-width: 150px; min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d4d4d8; border-radius: 6px; color: #3f3f46; background: #fff; font-size: 11px; }.admin-status { border-color: #e4e4e7; background: #fafafa; }.admin-status.status-active { color: #3f3f46; background: #f4f4f5; }.admin-status.status-invited { color: #52525b; background: #fafafa; }.admin-status.status-suspended { color: #52525b; background: #fafafa; }
-.setting-row select { max-width: 180px; min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d4d4d8; border-radius: 6px; color: #3f3f46; background: #fff; font-size: 11px; }
+.admin-select, .admin-status { max-width: 150px; min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d4d4d8; border-radius: 6px; color: #3f3f46; background-color: #fff; font-size: 11px; }.admin-status { border-color: #e4e4e7; background-color: #fafafa; }.admin-status.status-active { color: #3f3f46; background-color: #f4f4f5; }.admin-status.status-invited { color: #52525b; background-color: #fafafa; }.admin-status.status-suspended { color: #52525b; background-color: #fafafa; }
+.setting-row select { max-width: 180px; min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d4d4d8; border-radius: 6px; color: #3f3f46; background-color: #fff; font-size: 11px; }
 .spaces-page, .questions-page, .admin-page { gap: 17px; }
 .space-search { width: min(620px, 100%); min-height: 42px; }
 .spaces-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }

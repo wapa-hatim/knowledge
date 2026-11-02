@@ -10,13 +10,13 @@ import { AddKnowledgeDialog, type KnowledgeAction } from './features/knowledge/A
 import { KnowledgeAssetDialog } from './features/knowledge/KnowledgeAssetDialog'
 import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialog'
 import { articleBodies, initialArticles } from './data/knowledge'
-import { initialAuditEvents, initialQuestions, initialSpaces, initialUsers } from './data/workspace'
+import { initialQuestions, initialSpaces } from './data/workspace'
 import { initialKnowledgeAssets, initialKnowledgeIntegrations, initialKnowledgeModels, initialTaxonomyTerms } from './data/knowledgeModels'
 import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { getCurrentWorkspaceRole, isSupabaseConfigured, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, manageWorkspaceUser, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -27,7 +27,7 @@ const AdminView = lazy(() => import('./features/admin/AdminView').then((module) 
 
 const roleViews: Record<Role, View[]> = {
   'Super Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'audit', 'search', 'article', 'question', 'help'],
-  'Space Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'search', 'article', 'question', 'help'],
+  'Space Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'search', 'article', 'question', 'help'],
   Author: ['overview', 'library', 'models', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
   Reviewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
   Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
@@ -83,8 +83,11 @@ function App() {
   const [articles, setArticles] = usePersistentState<Article[]>('atlas-articles', storedArticles)
   const [questions, setQuestions] = usePersistentState<KnowledgeQuestion[]>('atlas-questions', initialQuestions)
   const [spaces, setSpaces] = usePersistentState<KnowledgeSpace[]>('atlas-spaces', initialSpaces)
-  const [users, setUsers] = usePersistentState<WorkspaceUser[]>('atlas-users', initialUsers)
-  const [auditEvents, setAuditEvents] = usePersistentState<AuditEvent[]>('atlas-audit', initialAuditEvents)
+  const [users, setUsers] = useState<WorkspaceUser[]>([])
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
+  const [adminSpaces, setAdminSpaces] = useState<string[]>([])
+  const [adminDataLoading, setAdminDataLoading] = useState(false)
+  const [adminDataError, setAdminDataError] = useState<string | null>(null)
   const [bookmarks, setBookmarks] = usePersistentState<string[]>('atlas-bookmarks', [])
   const [zeroResultQueries, setZeroResultQueries] = usePersistentState<string[]>('atlas-search-gaps', [])
   const [settings, setSettings] = usePersistentState<WorkspaceSettings>('atlas-settings', defaultSettings)
@@ -102,17 +105,38 @@ function App() {
   useEffect(() => {
     if (!supabase) return
     let active = true
-    const shouldShowLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
-
-    void supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return
-      const session = data.session
-      if (session) {
+    const syncSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'], forceLogin: boolean) => {
+      let nextRole: Role = 'Viewer'
+      if (session && !forceLogin) {
         const { role: profileRole } = await getCurrentWorkspaceRole()
-        if (active && profileRole) setRole(resolveRoleFromMetadata(profileRole))
+        if (profileRole) nextRole = resolveRoleFromMetadata(profileRole)
       }
-      setIsLoggedOut(shouldShowLogin || !session)
+      if (!active) return
+      setRole(nextRole)
+      if (session && !forceLogin && nextRole === 'Super Admin') {
+        setAdminDataLoading(true)
+        const { data: adminData, error } = await loadWorkspaceAdminData()
+        if (active) {
+          setUsers(adminData?.users ?? [])
+          setAuditEvents(adminData?.events ?? [])
+          setAdminSpaces(adminData?.spaces ?? [])
+          setAdminDataError(error)
+          setAdminDataLoading(false)
+        }
+      } else {
+        setUsers([])
+        setAuditEvents([])
+        setAdminSpaces([])
+        setAdminDataError(null)
+        setAdminDataLoading(false)
+      }
+      setIsLoggedOut(forceLogin || !session)
       setIsAuthLoading(false)
+    }
+
+    void supabase.auth.getSession().then(({ data }) => {
+      const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
+      return syncSession(data.session, forceLogin)
     }).catch(() => {
       if (!active) return
       setIsLoggedOut(true)
@@ -120,15 +144,9 @@ function App() {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(async () => {
-        if (!active) return
-        if (session) {
-          const { role: profileRole } = await getCurrentWorkspaceRole()
-          if (active && profileRole) setRole(resolveRoleFromMetadata(profileRole))
-        }
+      window.setTimeout(() => {
         const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
-        setIsLoggedOut(forceLogin || !session)
-        setIsAuthLoading(false)
+        void syncSession(session, forceLogin)
       }, 0)
     })
 
@@ -203,13 +221,49 @@ function App() {
     updateArticle(selectedArticle.id, (article) => ({ ...article, body: version.body, status: version.status, updated: 'Just now' }))
     addEvent('Atlas Admin', 'Restored version', selectedArticle.title, 'Content')
   }
-  const updateUser = (user: WorkspaceUser) => {
+  const updateUser = async (user: WorkspaceUser) => {
+    const { error } = await manageWorkspaceUser('update', { member: user })
+    if (error) return error
     setUsers((current) => current.map((existing) => existing.id === user.id ? user : existing))
-    addEvent('Atlas Admin', 'Updated member access', `${user.name} · ${user.role} · ${user.status}`, 'Access')
+    const { data, error: refreshError } = await loadWorkspaceAdminData()
+    if (data) {
+      setAuditEvents(data.events)
+      setAdminSpaces(data.spaces)
+    }
+    setAdminDataError(refreshError)
+    return null
   }
-  const inviteUser = (user: WorkspaceUser) => {
-    setUsers((current) => [...current, user])
-    addEvent('Atlas Admin', 'Invited member', user.name, 'Access')
+  const inviteUser = async (user: Omit<WorkspaceUser, 'id'>) => {
+    const { data: result, error } = await manageWorkspaceUser('invite', { member: user })
+    if (error) return error
+    const member = (result as { member?: WorkspaceUser } | null)?.member
+    if (member) setUsers((current) => [member, ...current])
+    const { data, error: refreshError } = await loadWorkspaceAdminData()
+    if (data) {
+      setUsers(data.users)
+      setAuditEvents(data.events)
+      setAdminSpaces(data.spaces)
+    }
+    setAdminDataError(refreshError)
+    return null
+  }
+  const setUserStatus = async (userId: string, status: WorkspaceUser['status']) => {
+    const { error } = await manageWorkspaceUser('status', { userId, status })
+    if (error) return error
+    setUsers((current) => current.map((user) => user.id === userId ? { ...user, status } : user))
+    const { data, error: refreshError } = await loadWorkspaceAdminData()
+    if (data) setAuditEvents(data.events)
+    setAdminDataError(refreshError)
+    return null
+  }
+  const deleteUser = async (userId: string) => {
+    const { error } = await manageWorkspaceUser('delete', { userId })
+    if (error) return error
+    setUsers((current) => current.filter((user) => user.id !== userId))
+    const { data, error: refreshError } = await loadWorkspaceAdminData()
+    if (data) setAuditEvents(data.events)
+    setAdminDataError(refreshError)
+    return null
   }
   const openCreateForSpace = (spaceName: string) => {
     setCreateSpace(spaceName)
@@ -302,9 +356,9 @@ function App() {
         {effectiveView === 'questions' && <QuestionsView questions={questions} role={role} initialSpace={knowledgeSpaceContext} onQuestionsChange={setQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
         {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} />}
-        {effectiveView === 'people' && <AdminView mode="people" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
-        {effectiveView === 'settings' && <AdminView mode="settings" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
-        {effectiveView === 'audit' && <AdminView mode="audit" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
+        {effectiveView === 'people' && <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
+        {effectiveView === 'settings' && <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
+        {effectiveView === 'audit' && <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
       </Suspense></main>
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Atlas Admin" initialSpace={createSpace} />
