@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { AlertCircle, BookOpenText, Eye, EyeOff, FileText, LoaderCircle } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
@@ -12,7 +12,7 @@ import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialo
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -56,6 +56,7 @@ const resolveRoleFromMetadata = (role: unknown): Role => {
 function App() {
   const [role, setRole] = useState<Role>('Viewer')
   const [currentUserName, setCurrentUserName] = useState('')
+  const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<View>('overview')
   const [isLoggedOut, setIsLoggedOut] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
@@ -84,6 +85,11 @@ function App() {
   const [adminDataError, setAdminDataError] = useState<string | null>(null)
   const [workspaceDataLoading, setWorkspaceDataLoading] = useState(false)
   const [workspaceDataError, setWorkspaceDataError] = useState<string | null>(null)
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [hubDataLoading, setHubDataLoading] = useState(false)
+  const [settingsLoading, setSettingsLoading] = useState(false)
+  const [searchGapsLoading, setSearchGapsLoading] = useState(false)
+  const [articleDetailsLoading, setArticleDetailsLoading] = useState(false)
   const [bookmarks, setBookmarks] = useState<string[]>([])
   const [zeroResultQueries, setZeroResultQueries] = useState<string[]>([])
   const [settings, setSettings] = useState<WorkspaceSettings>(defaultSettings)
@@ -91,6 +97,10 @@ function App() {
   const [knowledgeModels, setKnowledgeModels] = useState<KnowledgeModel[]>([])
   const [knowledgeIntegrations, setKnowledgeIntegrations] = useState<KnowledgeIntegration[]>([])
   const [taxonomyTerms, setTaxonomyTerms] = useState<string[]>([])
+  const activeUserIdRef = useRef<string | null>(null)
+  const loadedSectionsRef = useRef(new Set<string>())
+  const pendingSectionsRef = useRef(new Set<string>())
+  const articleDetailRequestRef = useRef(0)
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
   const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? spaces[0]?.name ?? ''
   const visibleArticles = useMemo(() => {
@@ -102,70 +112,76 @@ function App() {
   useEffect(() => {
     if (!supabase) return
     let active = true
+    const clearWorkspace = () => {
+      setAuthUserId(null)
+      setCurrentUserName('')
+      setArticles([])
+      setQuestions([])
+      setSpaces([])
+      setKnowledgeAssets([])
+      setKnowledgeModels([])
+      setKnowledgeIntegrations([])
+      setTaxonomyTerms([])
+      setBookmarks([])
+      setZeroResultQueries([])
+      setUsers([])
+      setAuditEvents([])
+      setAdminSpaces([])
+      setAdminDataError(null)
+      setWorkspaceDataError(null)
+      setWorkspaceDataLoading(false)
+      setAdminDataLoading(false)
+      loadedSectionsRef.current.clear()
+      pendingSectionsRef.current.clear()
+    }
     const syncSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'], forceLogin: boolean) => {
-      let nextRole: Role = 'Viewer'
-      if (session && !forceLogin) {
-        const { role: profileRole } = await getCurrentWorkspaceRole()
-        if (profileRole) nextRole = resolveRoleFromMetadata(profileRole)
-      }
       if (!active) return
-      setRole(nextRole)
-      if (session && !forceLogin) {
-        setWorkspaceDataLoading(true)
-        const { data: workspaceData, error: workspaceError } = await loadWorkspaceData(nextRole)
-        if (active) {
-          setArticles(workspaceData?.articles ?? [])
-          setCurrentUserName(workspaceData?.currentUserName ?? '')
-          setQuestions(workspaceData?.questions ?? [])
-          setSpaces(workspaceData?.spaces ?? [])
-          setKnowledgeAssets(workspaceData?.assets ?? [])
-          setKnowledgeModels(workspaceData?.models ?? [])
-          setKnowledgeIntegrations(workspaceData?.integrations ?? [])
-          setTaxonomyTerms(workspaceData?.taxonomyTerms ?? [])
-          setBookmarks(workspaceData?.bookmarks ?? [])
-          setZeroResultQueries(workspaceData?.zeroResultQueries ?? [])
-          setSettings(workspaceData?.settings ?? defaultSettings)
-          setWorkspaceDataError(workspaceError)
-          setWorkspaceDataLoading(false)
-          setCreateSpace(workspaceData?.spaces[0]?.name ?? '')
-        }
-        if (nextRole === 'Super Admin') {
-          setAdminDataLoading(true)
-          const { data: adminData, error: adminError } = await loadWorkspaceAdminData()
-          if (active) {
-            setUsers(adminData?.users ?? [])
-            setAuditEvents(adminData?.events ?? [])
-            setAdminSpaces(adminData?.spaces ?? [])
-            setAdminDataError(adminError)
-            setAdminDataLoading(false)
-          }
-        } else {
-          setUsers([])
-          setAuditEvents([])
-          setAdminSpaces([])
-          setAdminDataError(null)
-        }
-      } else {
-        setArticles([])
-        setCurrentUserName('')
-        setQuestions([])
-        setSpaces([])
-        setKnowledgeAssets([])
-        setKnowledgeModels([])
-        setKnowledgeIntegrations([])
-        setTaxonomyTerms([])
-        setBookmarks([])
-        setZeroResultQueries([])
-        setUsers([])
-        setAuditEvents([])
-        setAdminSpaces([])
-        setAdminDataError(null)
-        setAdminDataLoading(false)
-        setWorkspaceDataError(null)
-        setWorkspaceDataLoading(false)
+      if (!session || forceLogin) {
+        activeUserIdRef.current = null
+        clearWorkspace()
+        setRole('Viewer')
+        setIsLoggedOut(true)
+        setIsAuthLoading(false)
+        return
       }
-      setIsLoggedOut(forceLogin || !session)
+
+      if (activeUserIdRef.current === session.user.id) return
+      activeUserIdRef.current = session.user.id
+      const { role: profileRole, userId, userName, error } = await getCurrentWorkspaceRole()
+      if (!active || activeUserIdRef.current !== session.user.id) return
+      if (error || !profileRole || !userId) {
+        activeUserIdRef.current = null
+        clearWorkspace()
+        setWorkspaceDataError(error ?? 'Your workspace profile could not be loaded.')
+        setIsLoggedOut(true)
+        setIsAuthLoading(false)
+        return
+      }
+
+      const nextRole = resolveRoleFromMetadata(profileRole)
+      setRole(nextRole)
+      setAuthUserId(userId)
+      setCurrentUserName(userName ?? '')
+      setIsLoggedOut(false)
       setIsAuthLoading(false)
+      setWorkspaceDataLoading(true)
+      const { data: workspaceData, error: workspaceError } = await loadCoreWorkspaceData(userId)
+      if (!active || activeUserIdRef.current !== userId) return
+      setArticles(workspaceData?.articles ?? [])
+      setSpaces(workspaceData?.spaces ?? [])
+      setBookmarks(workspaceData?.bookmarks ?? [])
+      setQuestions([])
+      setKnowledgeAssets([])
+      setKnowledgeModels([])
+      setKnowledgeIntegrations([])
+      setTaxonomyTerms([])
+      setZeroResultQueries([])
+      setUsers([])
+      setAuditEvents([])
+      setAdminSpaces([])
+      setCreateSpace(workspaceData?.spaces[0]?.name ?? '')
+      setWorkspaceDataError(workspaceError)
+      setWorkspaceDataLoading(false)
     }
 
     void supabase.auth.getSession().then(({ data }) => {
@@ -190,6 +206,108 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (effectiveView !== 'questions' || !authUserId || loadedSectionsRef.current.has('questions') || pendingSectionsRef.current.has('questions')) return
+    pendingSectionsRef.current.add('questions')
+    setQuestionsLoading(true)
+    void loadQuestionData().then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId) return
+      if (error || !data) setWorkspaceDataError(error ?? 'Could not load questions.')
+      else {
+        setQuestions(data)
+        loadedSectionsRef.current.add('questions')
+      }
+    }).finally(() => {
+      pendingSectionsRef.current.delete('questions')
+      if (activeUserIdRef.current === authUserId) setQuestionsLoading(false)
+    })
+  }, [effectiveView, authUserId])
+
+  useEffect(() => {
+    if (effectiveView !== 'models' || !authUserId || loadedSectionsRef.current.has('hub') || pendingSectionsRef.current.has('hub')) return
+    pendingSectionsRef.current.add('hub')
+    setHubDataLoading(true)
+    void loadKnowledgeHubData(role).then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId) return
+      if (error || !data) setWorkspaceDataError(error ?? 'Could not load knowledge models.')
+      else {
+        setKnowledgeAssets(data.assets)
+        setKnowledgeModels(data.models)
+        setKnowledgeIntegrations(data.integrations)
+        setTaxonomyTerms(data.taxonomyTerms)
+        loadedSectionsRef.current.add('hub')
+      }
+    }).finally(() => {
+      pendingSectionsRef.current.delete('hub')
+      if (activeUserIdRef.current === authUserId) setHubDataLoading(false)
+    })
+  }, [effectiveView, authUserId, role])
+
+  useEffect(() => {
+    if (!authUserId || (effectiveView !== 'people' && effectiveView !== 'audit') || loadedSectionsRef.current.has('admin') || pendingSectionsRef.current.has('admin')) return
+    if (role !== 'Super Admin') return
+    pendingSectionsRef.current.add('admin')
+    setAdminDataLoading(true)
+    void loadWorkspaceAdminData().then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId) return
+      setUsers(data?.users ?? [])
+      setAuditEvents(data?.events ?? [])
+      setAdminSpaces(data?.spaces ?? [])
+      setAdminDataError(error)
+      if (!error) loadedSectionsRef.current.add('admin')
+    }).finally(() => {
+      pendingSectionsRef.current.delete('admin')
+      if (activeUserIdRef.current === authUserId) setAdminDataLoading(false)
+    })
+  }, [effectiveView, authUserId, role])
+
+  useEffect(() => {
+    if (effectiveView !== 'settings' || !authUserId || loadedSectionsRef.current.has('settings') || pendingSectionsRef.current.has('settings')) return
+    pendingSectionsRef.current.add('settings')
+    setSettingsLoading(true)
+    void loadWorkspaceSettings().then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId) return
+      if (error || !data) setWorkspaceDataError(error ?? 'Could not load workspace settings.')
+      else {
+        setSettings(data)
+        loadedSectionsRef.current.add('settings')
+      }
+    }).finally(() => {
+      pendingSectionsRef.current.delete('settings')
+      if (activeUserIdRef.current === authUserId) setSettingsLoading(false)
+    })
+  }, [effectiveView, authUserId])
+
+  useEffect(() => {
+    if (effectiveView !== 'analytics' || !authUserId || loadedSectionsRef.current.has('search-gaps') || pendingSectionsRef.current.has('search-gaps')) return
+    pendingSectionsRef.current.add('search-gaps')
+    setSearchGapsLoading(true)
+    void loadSearchGaps().then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId) return
+      if (error || !data) setWorkspaceDataError(error ?? 'Could not load search analytics.')
+      else {
+        setZeroResultQueries(data)
+        loadedSectionsRef.current.add('search-gaps')
+      }
+    }).finally(() => {
+      pendingSectionsRef.current.delete('search-gaps')
+      if (activeUserIdRef.current === authUserId) setSearchGapsLoading(false)
+    })
+  }, [effectiveView, authUserId])
+
+  useEffect(() => {
+    if (!selectedArticleId || !authUserId || !selectedArticle || selectedArticle.body !== undefined) return
+    const requestId = ++articleDetailRequestRef.current
+    setArticleDetailsLoading(true)
+    void loadArticleDetails(selectedArticleId).then(({ data, error }) => {
+      if (activeUserIdRef.current !== authUserId || requestId !== articleDetailRequestRef.current) return
+      if (error || !data) setWorkspaceDataError(error ?? 'Could not load this article.')
+      else setArticles((current) => current.map((article) => article.id === selectedArticleId ? { ...article, ...data } : article))
+    }).finally(() => {
+      if (requestId === articleDetailRequestRef.current && activeUserIdRef.current === authUserId) setArticleDetailsLoading(false)
+    })
+  }, [selectedArticleId, selectedArticle?.body, authUserId])
 
   const addEvent = (_actor: string, action: string, target: string, type: AuditEvent['type']) => {
     void recordAuditEvent(action, target, type).then(({ data, error }) => {
