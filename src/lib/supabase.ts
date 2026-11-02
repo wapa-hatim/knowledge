@@ -249,6 +249,185 @@ export async function loadWorkspaceData(role: Role) {
   return { data, error: null }
 }
 
+export async function loadCoreWorkspaceData(userId: string) {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+
+  const [spacesResult, categoriesResult, articlesResult, bookmarksResult, profilesResult] = await Promise.all([
+    supabase.from('spaces').select('id, name, description, color, owner_id, parent_id').order('name'),
+    supabase.from('categories').select('id, space_id, name, parent_id').order('name'),
+    supabase.from('articles').select('id, space_id, category_id, title, summary, status, owner_id, author_id, tags, view_count, review_due_at, updated_at').order('updated_at', { ascending: false }).limit(1000),
+    supabase.from('bookmarks').select('article_id').eq('user_id', userId),
+    supabase.from('profiles').select('id, display_name'),
+  ])
+  const error = spacesResult.error ?? categoriesResult.error ?? articlesResult.error ?? bookmarksResult.error ?? profilesResult.error
+  if (error) return { data: null, error: error.message }
+
+  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const spacesById = new Map((spacesResult.data ?? []).map((space) => [space.id, space]))
+  const categoryNames = new Map<string, string[]>()
+  const categoriesById = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
+  const childrenBySpace = new Map<string, string[]>()
+  for (const category of categoriesResult.data ?? []) {
+    if (!category.parent_id) categoryNames.set(category.space_id, [...(categoryNames.get(category.space_id) ?? []), category.name])
+  }
+  for (const space of spacesResult.data ?? []) {
+    if (space.parent_id) childrenBySpace.set(space.parent_id, [...(childrenBySpace.get(space.parent_id) ?? []), space.name])
+  }
+
+  const articles: Article[] = (articlesResult.data ?? []).map((article) => {
+    const space = spacesById.get(article.space_id)
+    const owner = profilesById.get(article.owner_id ?? article.author_id) ?? 'Workspace member'
+    return {
+      id: article.id,
+      title: article.title,
+      summary: article.summary,
+      space: space?.name ?? 'Unknown space',
+      category: article.category_id ? categoriesById.get(article.category_id) ?? 'Uncategorized' : 'Uncategorized',
+      owner,
+      updated: relativeDate(article.updated_at),
+      status: article.status as Article['status'],
+      views: String(article.view_count),
+      tags: article.tags ?? [],
+      initials: initialsFor(owner),
+      color: space?.color ?? 'green',
+      reviewDue: displayDate(article.review_due_at),
+      comments: [],
+      versions: [],
+    }
+  })
+
+  const spaces: KnowledgeSpace[] = (spacesResult.data ?? []).filter((space) => !space.parent_id).map((space) => ({
+    name: space.name,
+    description: space.description,
+    color: space.color,
+    articleCount: articles.filter((article) => article.space === space.name).length,
+    owner: profilesById.get(space.owner_id) ?? 'Space owner',
+    categories: categoryNames.get(space.id) ?? [],
+    children: childrenBySpace.get(space.id),
+  }))
+
+  return {
+    data: {
+      currentUserName: profilesById.get(userId) ?? 'Workspace member',
+      articles,
+      spaces,
+      bookmarks: (bookmarksResult.data ?? []).map((bookmark) => bookmark.article_id),
+    },
+    error: null,
+  }
+}
+
+export async function loadArticleDetails(articleId: string) {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const [articleResult, commentsResult, versionsResult, profilesResult] = await Promise.all([
+    supabase.from('articles').select('body').eq('id', articleId).single(),
+    supabase.from('article_comments').select('id, author_id, body, created_at').eq('article_id', articleId).order('created_at'),
+    supabase.from('article_versions').select('id, title, body, status, author_id, created_at').eq('article_id', articleId).order('created_at', { ascending: false }),
+    supabase.from('profiles').select('id, display_name'),
+  ])
+  const error = articleResult.error ?? commentsResult.error ?? versionsResult.error ?? profilesResult.error
+  if (error) return { data: null, error: error.message }
+  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  return {
+    data: {
+      body: articleResult.data.body,
+      comments: (commentsResult.data ?? []).map((comment) => ({ id: comment.id, author: profiles.get(comment.author_id) ?? 'Workspace member', body: comment.body, createdAt: relativeDate(comment.created_at) })),
+      versions: (versionsResult.data ?? []).map((version) => ({ id: version.id, title: version.title, body: version.body, status: version.status as ArticleVersion['status'], author: profiles.get(version.author_id) ?? 'Workspace member', savedAt: displayDate(version.created_at) })),
+    },
+    error: null,
+  }
+}
+
+export async function loadQuestionData() {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user) return { data: null, error: authError?.message ?? 'Sign in to load questions.' }
+  const [spacesResult, questionsResult, answersResult, voteCountsResult, questionVotesResult, answerVotesResult, profilesResult] = await Promise.all([
+    supabase.from('spaces').select('id, name'),
+    supabase.from('knowledge_questions').select('id, space_id, author_id, title, body, tags, accepted_answer_id, created_at').order('created_at', { ascending: false }),
+    supabase.from('question_answers').select('id, question_id, author_id, body, verified_by, created_at').order('created_at'),
+    supabase.rpc('get_workspace_vote_counts'),
+    supabase.from('question_votes').select('question_id').eq('user_id', authData.user.id),
+    supabase.from('answer_votes').select('answer_id').eq('user_id', authData.user.id),
+    supabase.from('profiles').select('id, display_name'),
+  ])
+  const error = spacesResult.error ?? questionsResult.error ?? answersResult.error ?? voteCountsResult.error ?? questionVotesResult.error ?? answerVotesResult.error ?? profilesResult.error
+  if (error) return { data: null, error: error.message }
+  const spaces = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
+  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const countRows = (voteCountsResult.data ?? []) as { vote_type: string; target_id: string; vote_count: number | string }[]
+  const counts = new Map<string, number>(countRows.map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
+  const questionVotes = new Set((questionVotesResult.data ?? []).map((vote) => vote.question_id))
+  const answerVotes = new Set((answerVotesResult.data ?? []).map((vote) => vote.answer_id))
+  const answersByQuestion = new Map<string, KnowledgeQuestion['answers']>()
+  for (const answer of answersResult.data ?? []) {
+    answersByQuestion.set(answer.question_id, [...(answersByQuestion.get(answer.question_id) ?? []), {
+      id: answer.id,
+      author: profiles.get(answer.author_id) ?? 'Workspace member',
+      body: answer.body,
+      votes: counts.get(`answer:${answer.id}`) ?? 0,
+      votedByMe: answerVotes.has(answer.id),
+      verified: Boolean(answer.verified_by),
+    }])
+  }
+  const questions: KnowledgeQuestion[] = (questionsResult.data ?? []).map((question) => ({
+    id: question.id,
+    title: question.title,
+    body: question.body,
+    space: spaces.get(question.space_id) ?? 'Unknown space',
+    tags: question.tags ?? [],
+    author: profiles.get(question.author_id) ?? 'Workspace member',
+    createdAt: relativeDate(question.created_at),
+    votes: counts.get(`question:${question.id}`) ?? 0,
+    votedByMe: questionVotes.has(question.id),
+    answers: (answersByQuestion.get(question.id) ?? []).map((answer) => ({ ...answer, verified: answer.verified || answer.id === question.accepted_answer_id })),
+    acceptedAnswerId: question.accepted_answer_id ?? undefined,
+  }))
+  return { data: questions, error: null }
+}
+
+export async function loadKnowledgeHubData(role: Role) {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const ownerProfiles = supabase.from('profiles').select('id, display_name')
+  const integrations = role === 'Super Admin' || role === 'Space Admin'
+    ? supabase.from('knowledge_integrations').select('id, name, description, category, connected, last_synced_at').order('created_at', { ascending: false })
+    : Promise.resolve({ data: [], error: null })
+  const [spacesResult, assetsResult, modelsResult, integrationsResult, taxonomyResult, profilesResult] = await Promise.all([
+    supabase.from('spaces').select('id, name'),
+    supabase.from('knowledge_assets').select('id, space_id, name, kind, storage_path, byte_size, status, created_at').order('created_at', { ascending: false }),
+    supabase.from('knowledge_models').select('id, name, format, description, owner_id, audience, coverage, status, use_cases').order('name'),
+    integrations,
+    supabase.from('taxonomy_terms').select('name').order('name'),
+    ownerProfiles,
+  ])
+  const error = spacesResult.error ?? assetsResult.error ?? modelsResult.error ?? integrationsResult.error ?? taxonomyResult.error ?? profilesResult.error
+  if (error) return { data: null, error: error.message }
+  const spaces = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
+  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  return {
+    data: {
+      assets: (assetsResult.data ?? []).map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind as KnowledgeAsset['kind'], space: spaces.get(asset.space_id) ?? 'Unknown space', size: assetSize(asset.byte_size), updated: relativeDate(asset.created_at), status: asset.status as KnowledgeAsset['status'], storagePath: asset.storage_path })),
+      models: (modelsResult.data ?? []).map((model) => ({ id: model.id, name: model.name, format: model.format as KnowledgeModel['format'], description: model.description, owner: model.owner_id ? profiles.get(model.owner_id) ?? 'Workspace member' : 'Workspace team', audience: model.audience, coverage: model.coverage, status: model.status as KnowledgeModel['status'], useCases: model.use_cases ?? [] })),
+      integrations: (integrationsResult.data ?? []).map((item) => ({ id: item.id, name: item.name, description: item.description, category: item.category as KnowledgeIntegration['category'], connected: item.connected, lastSynced: item.last_synced_at ? relativeDate(item.last_synced_at) : 'Never' })),
+      taxonomyTerms: (taxonomyResult.data ?? []).map((term) => term.name),
+    },
+    error: null,
+  }
+}
+
+export async function loadWorkspaceSettings() {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.from('workspace_settings').select('value').eq('key', 'workspace').maybeSingle()
+  if (error) return { data: null, error: error.message }
+  return { data: { ...defaultWorkspaceSettings, ...(data?.value as Partial<WorkspaceSettings> | undefined) }, error: null }
+}
+
+export async function loadSearchGaps() {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.from('search_queries').select('query').eq('result_count', 0).order('created_at', { ascending: false }).limit(50)
+  return { data: data?.map((row) => row.query) ?? null, error: error?.message ?? null }
+}
+
 async function getAuthenticatedUserId() {
   if (!supabase) return { id: null, error: 'Supabase is not configured.' }
   const { data, error } = await supabase.auth.getUser()
@@ -650,12 +829,12 @@ export async function getCurrentWorkspaceRole() {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, display_name')
     .eq('id', userData.user.id)
     .single()
 
   if (error) return { role: null, error: error.message }
-  return { role: data.role as string, error: null }
+  return { role: data.role as string, userId: userData.user.id, userName: data.display_name || userData.user.email?.split('@')[0] || 'Workspace member', error: null }
 }
 
 function fileSizeLabel(bytes: number) {
