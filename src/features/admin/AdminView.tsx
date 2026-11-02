@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Activity, ArrowDownUp, Ban, Check, ChevronDown, CircleAlert, CircleCheck, FileText, KeyRound, MailPlus, Pencil, Search, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { Activity, ArrowDownUp, Ban, Check, CircleAlert, CircleCheck, FileText, KeyRound, MailPlus, Pencil, Search, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import type { AuditEvent, Role, WorkspaceSettings, WorkspaceUser } from '../../types'
 import { Button } from '../../components/ui/Button'
 import { resetPassword } from '../../lib/supabase'

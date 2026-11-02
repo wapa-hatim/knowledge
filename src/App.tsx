@@ -85,7 +85,6 @@ function App() {
   const [adminDataLoading, setAdminDataLoading] = useState(false)
   const [adminDataError, setAdminDataError] = useState<string | null>(null)
   const [workspaceDataLoading, setWorkspaceDataLoading] = useState(false)
-  const [coreDataLoaded, setCoreDataLoaded] = useState(false)
   const [workspaceDataError, setWorkspaceDataError] = useState<string | null>(null)
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [hubDataLoading, setHubDataLoading] = useState(false)
@@ -134,7 +133,6 @@ function App() {
       setWorkspaceDataError(null)
       setSettings(defaultSettings)
       setWorkspaceDataLoading(false)
-      setCoreDataLoaded(false)
       setAdminDataLoading(false)
       setQuestionsLoading(false)
       setHubDataLoading(false)
@@ -175,7 +173,6 @@ function App() {
       setCurrentUserName(userName ?? '')
       setIsLoggedOut(false)
       setIsAuthLoading(false)
-      setCoreDataLoaded(false)
       setWorkspaceDataLoading(true)
       const { data: workspaceData, error: workspaceError } = await loadCoreWorkspaceData(userId)
       if (!isMountedRef.current || activeUserIdRef.current !== userId) return
@@ -194,7 +191,6 @@ function App() {
       setCreateSpace(workspaceData?.spaces[0]?.name ?? '')
       setWorkspaceDataError(workspaceError)
       setWorkspaceDataLoading(false)
-      setCoreDataLoaded(true)
     }
 
     void supabase.auth.getSession().then(({ data }) => {

@@ -65,6 +65,11 @@ function assetSize(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function mapWorkspaceMembers(data: unknown) {
+  const records = (data ?? []) as { id: string; display_name: string | null }[]
+  return new Map<string, string>(records.map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+}
+
 export async function loadWorkspaceData(role: Role) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
   const { data: authData, error: authError } = await supabase.auth.getUser()
@@ -102,7 +107,7 @@ export async function loadWorkspaceData(role: Role) {
   const queryError = results.find((result) => result.error)?.error
   if (queryError) return { data: null, error: queryError.message }
 
-  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const profilesById = mapWorkspaceMembers(profilesResult.data)
   const spacesById = new Map((spacesResult.data ?? []).map((space) => [space.id, space]))
   const categoriesById = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const categoriesBySpace = new Map<string, string[]>()
@@ -263,7 +268,7 @@ export async function loadCoreWorkspaceData(userId: string) {
   const error = spacesResult.error ?? categoriesResult.error ?? articlesResult.error ?? bookmarksResult.error ?? profilesResult.error ?? eventsResult.error
   if (error) return { data: null, error: error.message }
 
-  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const profilesById = mapWorkspaceMembers(profilesResult.data)
   const spacesById = new Map((spacesResult.data ?? []).map((space) => [space.id, space]))
   const categoryNames = new Map<string, string[]>()
   const categoriesById = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
@@ -730,7 +735,7 @@ export async function loadWorkspaceAdminData(mode: 'people' | 'audit' = 'people'
     ])
     const error = eventsResult.error ?? profilesResult.error
     if (error) return { data: null, error: error.message }
-    const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name]))
+    const profilesById = mapWorkspaceMembers(profilesResult.data)
     const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => ({
       id: event.id,
       actor: event.actor_id ? profilesById.get(event.actor_id) || 'Workspace member' : 'System',
@@ -830,7 +835,7 @@ export async function signOut() {
   return { error: error?.message ?? null }
 }
 
-export async function getCurrentWorkspaceRole() {
+export async function getCurrentWorkspaceRole(authenticatedUserId?: string) {
   if (!supabase) {
     return {
       role: null,
@@ -838,18 +843,21 @@ export async function getCurrentWorkspaceRole() {
     }
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-  if (userError || !userData.user) {
-    return { role: null, error: userError?.message ?? 'No authenticated user.' }
+  let userId = authenticatedUserId
+  if (!userId) {
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) return { role: null, error: userError?.message ?? 'No authenticated user.' }
+    userId = userData.user.id
   }
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('role, display_name')
-    .eq('id', userData.user.id)
+    .select('role, display_name, status')
+    .eq('id', userId)
     .single()
 
   if (error) return { role: null, error: error.message }
+  if (data.status !== 'Active') return { role: null, error: 'Your workspace account is not active.' }
   return { role: data.role as string, userId: userData.user.id, userName: data.display_name || userData.user.email?.split('@')[0] || 'Workspace member', error: null }
 }
 
