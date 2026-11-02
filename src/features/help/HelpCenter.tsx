@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowRight, BookOpen, CircleHelp, FileText, Search, ShieldCheck } from 'lucide-react'
 import type { View } from '../../types'
+import './help.css'
 
 const helpTopics: { title: string; description: string; view: View; icon: typeof BookOpen }[] = [
   { title: 'Find trusted knowledge', description: 'Search the library, narrow by space, and open the latest approved answer.', view: 'library', icon: Search },

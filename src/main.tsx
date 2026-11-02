@@ -5,6 +5,7 @@ import './index.css'
 import './styles.css'
 import App from './App.tsx'
 import './surface-overrides.css'
+import './search-surfaces.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
