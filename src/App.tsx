@@ -90,7 +90,7 @@ function App() {
   const [hubDataLoading, setHubDataLoading] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [searchGapsLoading, setSearchGapsLoading] = useState(false)
-  const [articleDetailsLoading, setArticleDetailsLoading] = useState(false)
+  const [loadedSections, setLoadedSections] = useState<Set<string>>(() => new Set())
   const [bookmarks, setBookmarks] = useState<string[]>([])
   const [zeroResultQueries, setZeroResultQueries] = useState<string[]>([])
   const [settings, setSettings] = useState<WorkspaceSettings>(defaultSettings)
@@ -101,9 +101,9 @@ function App() {
   const activeUserIdRef = useRef<string | null>(null)
   const loadedSectionsRef = useRef(new Set<string>())
   const pendingSectionsRef = useRef(new Set<string>())
-  const articleDetailRequestRef = useRef(0)
   const isMountedRef = useRef(false)
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
+  const selectedArticleBody = selectedArticle?.body
   const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? spaces[0]?.name ?? ''
   const visibleArticles = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -138,9 +138,9 @@ function App() {
       setHubDataLoading(false)
       setSettingsLoading(false)
       setSearchGapsLoading(false)
-      setArticleDetailsLoading(false)
       loadedSectionsRef.current.clear()
       pendingSectionsRef.current.clear()
+      setLoadedSections(new Set())
     }
     const syncSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'], forceLogin: boolean) => {
       if (!isMountedRef.current) return
@@ -217,7 +217,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (effectiveView !== 'questions' || !authUserId || loadedSectionsRef.current.has('questions') || pendingSectionsRef.current.has('questions')) return
+    if (effectiveView !== 'questions' || !authUserId || loadedSections.has('questions') || pendingSectionsRef.current.has('questions')) return
     pendingSectionsRef.current.add('questions')
     setQuestionsLoading(true)
     void loadQuestionData().then(({ data, error }) => {
@@ -226,15 +226,16 @@ function App() {
       else {
         setQuestions(data)
         loadedSectionsRef.current.add('questions')
+        setLoadedSections((current) => new Set(current).add('questions'))
       }
     }).finally(() => {
       pendingSectionsRef.current.delete('questions')
       if (activeUserIdRef.current === authUserId) setQuestionsLoading(false)
     })
-  }, [effectiveView, authUserId])
+  }, [effectiveView, authUserId, loadedSections])
 
   useEffect(() => {
-    if (effectiveView !== 'models' || !authUserId || loadedSectionsRef.current.has('hub') || pendingSectionsRef.current.has('hub')) return
+    if (effectiveView !== 'models' || !authUserId || loadedSections.has('hub') || pendingSectionsRef.current.has('hub')) return
     pendingSectionsRef.current.add('hub')
     setHubDataLoading(true)
     void loadKnowledgeHubData(role).then(({ data, error }) => {
@@ -246,19 +247,20 @@ function App() {
         setKnowledgeIntegrations(data.integrations)
         setTaxonomyTerms(data.taxonomyTerms)
         loadedSectionsRef.current.add('hub')
+        setLoadedSections((current) => new Set(current).add('hub'))
       }
     }).finally(() => {
       pendingSectionsRef.current.delete('hub')
       if (activeUserIdRef.current === authUserId) setHubDataLoading(false)
     })
-  }, [effectiveView, authUserId, role])
+  }, [effectiveView, authUserId, role, loadedSections])
 
   useEffect(() => {
     if (!authUserId || (effectiveView !== 'people' && effectiveView !== 'audit')) return
     if (role !== 'Super Admin') return
     const adminMode = effectiveView === 'audit' ? 'audit' : 'people'
     const sectionKey = `admin:${adminMode}`
-    if (loadedSectionsRef.current.has(sectionKey) || pendingSectionsRef.current.has(sectionKey)) return
+    if (loadedSections.has(sectionKey) || pendingSectionsRef.current.has(sectionKey)) return
     pendingSectionsRef.current.add(sectionKey)
     setAdminDataLoading(true)
     void loadWorkspaceAdminData(adminMode).then(({ data, error }) => {
@@ -270,15 +272,18 @@ function App() {
         setAuditEvents(data?.events ?? [])
       }
       setAdminDataError(error)
-      if (!error) loadedSectionsRef.current.add(sectionKey)
+      if (!error) {
+        loadedSectionsRef.current.add(sectionKey)
+        setLoadedSections((current) => new Set(current).add(sectionKey))
+      }
     }).finally(() => {
       pendingSectionsRef.current.delete(sectionKey)
       if (activeUserIdRef.current === authUserId) setAdminDataLoading(false)
     })
-  }, [effectiveView, authUserId, role])
+  }, [effectiveView, authUserId, role, loadedSections])
 
   useEffect(() => {
-    if (effectiveView !== 'settings' || !authUserId || loadedSectionsRef.current.has('settings') || pendingSectionsRef.current.has('settings')) return
+    if (effectiveView !== 'settings' || !authUserId || loadedSections.has('settings') || pendingSectionsRef.current.has('settings')) return
     pendingSectionsRef.current.add('settings')
     setSettingsLoading(true)
     void loadWorkspaceSettings().then(({ data, error }) => {
@@ -287,15 +292,16 @@ function App() {
       else {
         setSettings(data)
         loadedSectionsRef.current.add('settings')
+        setLoadedSections((current) => new Set(current).add('settings'))
       }
     }).finally(() => {
       pendingSectionsRef.current.delete('settings')
       if (activeUserIdRef.current === authUserId) setSettingsLoading(false)
     })
-  }, [effectiveView, authUserId])
+  }, [effectiveView, authUserId, loadedSections])
 
   useEffect(() => {
-    if (effectiveView !== 'analytics' || !authUserId || loadedSectionsRef.current.has('search-gaps') || pendingSectionsRef.current.has('search-gaps')) return
+    if (effectiveView !== 'analytics' || !authUserId || loadedSections.has('search-gaps') || pendingSectionsRef.current.has('search-gaps')) return
     pendingSectionsRef.current.add('search-gaps')
     setSearchGapsLoading(true)
     void loadSearchGaps().then(({ data, error }) => {
@@ -304,25 +310,22 @@ function App() {
       else {
         setZeroResultQueries(data)
         loadedSectionsRef.current.add('search-gaps')
+        setLoadedSections((current) => new Set(current).add('search-gaps'))
       }
     }).finally(() => {
       pendingSectionsRef.current.delete('search-gaps')
       if (activeUserIdRef.current === authUserId) setSearchGapsLoading(false)
     })
-  }, [effectiveView, authUserId])
+  }, [effectiveView, authUserId, loadedSections])
 
   useEffect(() => {
-    if (!selectedArticleId || !authUserId || !selectedArticle || selectedArticle.body !== undefined) return
-    const requestId = ++articleDetailRequestRef.current
-    setArticleDetailsLoading(true)
+    if (!selectedArticleId || !authUserId || selectedArticleBody !== undefined) return
     void loadArticleDetails(selectedArticleId).then(({ data, error }) => {
-      if (activeUserIdRef.current !== authUserId || requestId !== articleDetailRequestRef.current) return
+      if (activeUserIdRef.current !== authUserId) return
       if (error || !data) setWorkspaceDataError(error ?? 'Could not load this article.')
       else setArticles((current) => current.map((article) => article.id === selectedArticleId ? { ...article, ...data } : article))
-    }).finally(() => {
-      if (requestId === articleDetailRequestRef.current && activeUserIdRef.current === authUserId) setArticleDetailsLoading(false)
     })
-  }, [selectedArticleId, selectedArticle?.body, authUserId])
+  }, [selectedArticleId, selectedArticleBody, authUserId])
 
   const addEvent = (_actor: string, action: string, target: string, type: AuditEvent['type']) => {
     void recordAuditEvent(action, target, type).then(({ data, error }) => {
@@ -502,6 +505,7 @@ function App() {
     if (error) return error
     setUsers((current) => current.map((existing) => existing.id === user.id ? user : existing))
     loadedSectionsRef.current.delete('admin:people')
+    setLoadedSections((current) => { const next = new Set(current); next.delete('admin:people'); return next })
     return null
   }
   const inviteUser = async (user: Omit<WorkspaceUser, 'id'>) => {
@@ -510,6 +514,7 @@ function App() {
     const member = (result as { member?: WorkspaceUser } | null)?.member
     if (member) setUsers((current) => [member, ...current])
     loadedSectionsRef.current.delete('admin:people')
+    setLoadedSections((current) => { const next = new Set(current); next.delete('admin:people'); return next })
     return null
   }
   const setUserStatus = async (userId: string, status: WorkspaceUser['status']) => {
@@ -517,6 +522,7 @@ function App() {
     if (error) return error
     setUsers((current) => current.map((user) => user.id === userId ? { ...user, status } : user))
     loadedSectionsRef.current.delete('admin:people')
+    setLoadedSections((current) => { const next = new Set(current); next.delete('admin:people'); return next })
     return null
   }
   const deleteUser = async (userId: string) => {
@@ -524,6 +530,7 @@ function App() {
     if (error) return error
     setUsers((current) => current.filter((user) => user.id !== userId))
     loadedSectionsRef.current.delete('admin:people')
+    setLoadedSections((current) => { const next = new Set(current); next.delete('admin:people'); return next })
     return null
   }
   const openCreateForSpace = (spaceName: string) => {
@@ -613,12 +620,12 @@ function App() {
     setResetEmail('')
   }
 
-  const adminPageLoading = adminDataLoading || Boolean(authUserId && !adminDataError && ((effectiveView === 'people' && !loadedSectionsRef.current.has('admin:people')) || (effectiveView === 'audit' && !loadedSectionsRef.current.has('admin:audit'))))
-  const questionsPageLoading = questionsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'questions' && !loadedSectionsRef.current.has('questions'))
-  const hubPageLoading = hubDataLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'models' && !loadedSectionsRef.current.has('hub'))
-  const settingsPageLoading = settingsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'settings' && !loadedSectionsRef.current.has('settings'))
-  const searchGapsPageLoading = searchGapsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'analytics' && !loadedSectionsRef.current.has('search-gaps'))
-  const articlePageLoading = articleDetailsLoading || Boolean(authUserId && selectedArticle && selectedArticle.body === undefined)
+  const adminPageLoading = adminDataLoading || Boolean(authUserId && !adminDataError && ((effectiveView === 'people' && !loadedSections.has('admin:people')) || (effectiveView === 'audit' && !loadedSections.has('admin:audit'))))
+  const questionsPageLoading = questionsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'questions' && !loadedSections.has('questions'))
+  const hubPageLoading = hubDataLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'models' && !loadedSections.has('hub'))
+  const settingsPageLoading = settingsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'settings' && !loadedSections.has('settings'))
+  const searchGapsPageLoading = searchGapsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'analytics' && !loadedSections.has('search-gaps'))
+  const articlePageLoading = Boolean(authUserId && selectedArticle && selectedArticle.body === undefined)
 
   if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><p>Checking your session…</p></section></main>
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
