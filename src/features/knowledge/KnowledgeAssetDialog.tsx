@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button'
 interface KnowledgeAssetDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (asset: KnowledgeAsset) => void
+  onCreate: (asset: KnowledgeAsset, file: File) => Promise<string | null>
   spaces: KnowledgeSpace[]
   initialSpace?: string | null
 }
@@ -34,18 +34,37 @@ export function KnowledgeAssetDialog({ open, onOpenChange, onCreate, spaces, ini
   const [file, setFile] = useState<File | null>(null)
   const [space, setSpace] = useState(initialSpace ?? 'Engineering')
   const [kind, setKind] = useState<KnowledgeAsset['kind']>('PDF')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setFile(null)
-    else setSpace(initialSpace ?? 'Engineering')
+    if (!nextOpen) {
+      setFile(null)
+      setUploadError('')
+    } else {
+      setSpace(initialSpace ?? 'Engineering')
+      setUploadError('')
+    }
     onOpenChange(nextOpen)
   }
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!file) return
-    onCreate({ id: `AS-${Date.now()}`, name: file.name, kind, space, size: formatSize(file.size), updated: 'Just now', status: 'Processing' })
-    setFile(null)
+    setIsUploading(true)
+    setUploadError('')
+    try {
+      const error = await onCreate({ id: '', name: file.name, kind, space, size: formatSize(file.size), updated: 'Just now', status: 'Processing' }, file)
+      if (error) {
+        setUploadError(error)
+        return
+      }
+      setFile(null)
+    } catch {
+      setUploadError('The upload failed. Please try again.')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return <Dialog.Root open={open} onOpenChange={handleOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog">
@@ -54,8 +73,9 @@ export function KnowledgeAssetDialog({ open, onOpenChange, onCreate, spaces, ini
     <form onSubmit={submit}>
       <label className="asset-dropzone"><FileUp size={21} /><strong>{file ? file.name : 'Choose a file to add'}</strong><span>{file ? formatSize(file.size) : 'PDF, DOCX, spreadsheets, slides, images, audio, or video'}</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.webm,.mp3,.wav,.m4a,.svg" onChange={(event) => { const selected = event.target.files?.[0] ?? null; setFile(selected); if (selected) setKind(inferKind(selected.name)) }} required /></label>
       <div className="form-row"><div><label className="form-label" htmlFor="asset-kind">Asset type</label><div className="select-field"><select id="asset-kind" value={kind} onChange={(event) => setKind(event.target.value as KnowledgeAsset['kind'])}>{assetKinds.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></div></div><div><label className="form-label" htmlFor="asset-space">Space</label><div className="select-field"><select id="asset-space" value={space} onChange={(event) => setSpace(event.target.value)}>{spaces.map((item) => <option key={item.name}>{item.name}</option>)}</select><ChevronDown size={14} /></div></div></div>
-      <div className="asset-note">This prototype stores the asset’s details in this browser. File upload and content indexing need a server connection.</div>
-      <div className="dialog-actions"><Button variant="ghost" type="button" onClick={() => handleOpenChange(false)}>Cancel</Button><Button type="submit" disabled={!file}>Add asset</Button></div>
+      <div className="asset-note">Files are uploaded to private Supabase Storage. Only signed-in members of this space can access them.</div>
+      {uploadError && <p className="auth-reset-note" role="alert">{uploadError}</p>}
+      <div className="dialog-actions"><Button variant="ghost" type="button" onClick={() => handleOpenChange(false)} disabled={isUploading}>Cancel</Button><Button type="submit" disabled={!file || isUploading}>{isUploading ? 'Uploading…' : 'Upload asset'}</Button></div>
     </form>
   </Dialog.Content></Dialog.Portal></Dialog.Root>
 }

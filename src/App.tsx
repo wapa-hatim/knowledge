@@ -16,7 +16,7 @@ import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { isSupabaseConfigured, resetPassword, signInWithEmail, signOut, supabase } from './lib/supabase'
+import { getCurrentWorkspaceRole, isSupabaseConfigured, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -44,7 +44,7 @@ const resolveRoleFromMetadata = (role: unknown): Role => {
 }
 
 function App() {
-  const [role, setRole] = useState<Role>('Super Admin')
+  const [role, setRole] = useState<Role>('Viewer')
   const [activeView, setActiveView] = useState<View>('overview')
   const [isLoggedOut, setIsLoggedOut] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
@@ -87,10 +87,13 @@ function App() {
     let active = true
     const shouldShowLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
 
-    void supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return
       const session = data.session
-      if (session) setRole(resolveRoleFromMetadata(session.user.app_metadata.role))
+      if (session) {
+        const { role: profileRole } = await getCurrentWorkspaceRole()
+        if (active && profileRole) setRole(resolveRoleFromMetadata(profileRole))
+      }
       setIsLoggedOut(shouldShowLogin || !session)
       setIsAuthLoading(false)
     }).catch(() => {
@@ -100,9 +103,12 @@ function App() {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         if (!active) return
-        if (session) setRole(resolveRoleFromMetadata(session.user.app_metadata.role))
+        if (session) {
+          const { role: profileRole } = await getCurrentWorkspaceRole()
+          if (active && profileRole) setRole(resolveRoleFromMetadata(profileRole))
+        }
         const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
         setIsLoggedOut(forceLogin || !session)
         setIsAuthLoading(false)
@@ -132,11 +138,14 @@ function App() {
     if (action === 'question') setActiveView('questions')
     if (action === 'source') setIsSourceOpen(true)
   }
-  const addKnowledgeAsset = (asset: KnowledgeAsset) => {
-    setKnowledgeAssets((current) => [asset, ...current])
+  const addKnowledgeAsset = async (asset: KnowledgeAsset, file: File) => {
+    const { data, error } = await uploadKnowledgeFile(file, asset.space, asset.kind)
+    if (error || !data) return error ?? 'The file could not be uploaded.'
+    setKnowledgeAssets((current) => [data, ...current])
     setIsAssetOpen(false)
-    addEvent('Atlas Admin', 'Added knowledge asset', asset.name, 'Content')
+    addEvent('Current user', 'Added knowledge asset', asset.name, 'Content')
     setActiveView('models')
+    return null
   }
   const addKnowledgeIntegration = (integration: KnowledgeIntegration) => {
     setKnowledgeIntegrations((current) => [integration, ...current])
@@ -220,7 +229,13 @@ function App() {
         setResetNotice(error ?? 'Unable to sign in. Please try again.')
         return
       }
-      setRole(resolveRoleFromMetadata(data.user.app_metadata.role))
+      const { role: profileRole, error: profileError } = await getCurrentWorkspaceRole()
+      if (profileError || !profileRole) {
+        await signOut()
+        setResetNotice(profileError ?? 'Your workspace profile is not set up yet. Ask an administrator to provision your account.')
+        return
+      }
+      setRole(resolveRoleFromMetadata(profileRole))
       setIsLoggedOut(false)
       if (typeof window !== 'undefined') {
         const nextUrl = new URL(window.location.href)

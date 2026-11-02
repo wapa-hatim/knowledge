@@ -62,31 +62,105 @@ export async function signOut() {
   return { error: error?.message ?? null }
 }
 
-export async function uploadKnowledgeFile(file: File, path?: string) {
+export async function getCurrentWorkspaceRole() {
   if (!supabase) {
     return {
-      data: null,
-      error: 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable uploads.',
+      role: null,
+      error: 'Supabase is not configured.',
     }
   }
 
-  const filePath = path ?? `${Date.now()}-${file.name.replace(/\s+/g, '-')}`
-  const { data, error } = await supabase.storage.from(supabaseBucket).upload(filePath, file, {
-    cacheControl: '3600',
-    upsert: false,
-  })
-
-  if (error) {
-    return { data: null, error: error.message }
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) {
+    return { role: null, error: userError?.message ?? 'No authenticated user.' }
   }
 
-  const { data: publicUrlData } = supabase.storage.from(supabaseBucket).getPublicUrl(filePath)
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (error) return { role: null, error: error.message }
+  return { role: data.role as string, error: null }
+}
+
+function fileSizeLabel(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export async function uploadKnowledgeFile(file: File, spaceName: string, kind: string) {
+  if (!supabase) {
+    return { data: null, error: 'Supabase is not configured. Set its URL and publishable key first.' }
+  }
+  if (file.size > 100 * 1024 * 1024) {
+    return { data: null, error: 'Files must be 100 MB or smaller.' }
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) {
+    return { data: null, error: userError?.message ?? 'Sign in before uploading a file.' }
+  }
+
+  const slug = spaceName.toLowerCase().replace(/&/g, ' ').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const { data: space, error: spaceError } = await supabase
+    .from('spaces')
+    .select('id, name, slug')
+    .eq('slug', slug)
+    .single()
+  if (spaceError || !space) {
+    return { data: null, error: spaceError?.message ?? `Space "${spaceName}" was not found in Supabase.` }
+  }
+
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-')
+  const filePath = `${space.slug}/${userData.user.id}/${crypto.randomUUID()}-${safeFileName}`
+  const { error: uploadError } = await supabase.storage.from(supabaseBucket).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: false,
+    contentType: file.type || 'application/octet-stream',
+  })
+
+  if (uploadError) {
+    return { data: null, error: uploadError.message }
+  }
+
+  const { data, error: metadataError } = await supabase
+    .from('knowledge_assets')
+    .insert({
+      space_id: space.id,
+      uploaded_by: userData.user.id,
+      name: file.name,
+      kind,
+      storage_path: filePath,
+      mime_type: file.type || 'application/octet-stream',
+      byte_size: file.size,
+      status: 'Processing',
+    })
+    .select('id, name, kind, status, created_at')
+    .single()
+
+  if (metadataError) {
+    await supabase.storage.from(supabaseBucket).remove([filePath])
+    return { data: null, error: metadataError.message }
+  }
 
   return {
     data: {
-      ...data,
-      publicUrl: publicUrlData.publicUrl,
+      id: data.id,
+      name: data.name,
+      kind: data.kind,
+      space: space.name,
+      size: fileSizeLabel(file.size),
+      updated: 'Just now',
+      status: data.status,
+      storagePath: filePath,
     },
     error: null,
   }
+}
+
+export async function createKnowledgeAssetUrl(storagePath: string, expiresIn = 3600) {
+  if (!supabase) return { url: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.storage.from(supabaseBucket).createSignedUrl(storagePath, expiresIn)
+  return { url: data?.signedUrl ?? null, error: error?.message ?? null }
 }

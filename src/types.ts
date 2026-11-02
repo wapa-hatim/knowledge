@@ -84,7 +84,8 @@ export interface KnowledgeAsset {
 	space: string
 	size: string
 	updated: string
-	status: 'Indexed' | 'Processing' | 'Synced'
+	status: 'Indexed' | 'Processing' | 'Synced' | 'Failed'
+	storagePath?: string
 }
 
 export interface KnowledgeModel {
