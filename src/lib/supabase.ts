@@ -343,7 +343,7 @@ export async function loadArticleDetails(articleId: string) {
   ])
   const error = articleResult.error ?? commentsResult.error ?? versionsResult.error ?? profilesResult.error
   if (error) return { data: null, error: error.message }
-  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const profiles = mapWorkspaceMembers(profilesResult.data)
   return {
     data: {
       body: articleResult.data.body,
@@ -764,7 +764,6 @@ export async function loadWorkspaceAdminData(mode: 'people' | 'audit' = 'people'
     membershipsByUser.set(membership.user_id, [...(membershipsByUser.get(membership.user_id) ?? []), spaceName])
   }
 
-  const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]))
   const users: WorkspaceUser[] = (profilesResult.data ?? []).map((profile) => ({
     id: profile.id,
     name: profile.display_name || profile.email.split('@')[0],
