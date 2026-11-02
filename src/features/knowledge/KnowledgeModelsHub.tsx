@@ -6,6 +6,7 @@ import './knowledge-hub.css'
 
 interface KnowledgeModelsHubProps {
   models: KnowledgeModel[]
+  loading: boolean
   assets: KnowledgeAsset[]
   integrations: KnowledgeIntegration[]
   taxonomyTerms: string[]
@@ -24,7 +25,7 @@ const knowledgeTypes = [
   { title: 'Dynamic data', detail: 'API specs and release feeds', icon: Braces, tone: 'tone-blue', action: 'Connect source' },
 ]
 
-export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms, onNavigate, onCreateArticle, onCreateAsset, onCreateSource, onAddTaxonomyTerm }: KnowledgeModelsHubProps) {
+export function KnowledgeModelsHub({ models, loading, assets, integrations, taxonomyTerms, onNavigate, onCreateArticle, onCreateAsset, onCreateSource, onAddTaxonomyTerm }: KnowledgeModelsHubProps) {
   const [newTerm, setNewTerm] = useState('')
   const modelHighlights = [
     { label: 'Managed models', value: models.filter((model) => model.status === 'Managed').length, delta: 'From Supabase', icon: Layers3, tone: 'tone-mint' },
@@ -71,10 +72,10 @@ export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms
 
     <div className="knowledge-hub-grid">
       <section className="panel knowledge-hub-panel"><div className="hub-panel-heading"><div><div className="eyebrow">FILES & MEDIA</div><h2>Unstructured assets</h2><p>Companion files indexed with workspace knowledge.</p></div><Button variant="outline" size="small" onClick={onCreateAsset}><FileUp size={14} />Add asset</Button></div>
-        {assets.length ? <div className="hub-record-list">{assets.slice(0, 5).map((asset) => <div className="hub-record-row" key={asset.id}><span className="hub-record-icon hub-file"><FileArchive size={16} /></span><span className="hub-record-copy"><strong>{asset.name}</strong><small>{asset.kind} · {asset.space} · {asset.size}</small></span><span className={`status-pill status-${asset.status.toLowerCase()}`}>{asset.status}</span></div>)}</div> : <div className="hub-empty">No files yet. Add a PDF, diagram, recording, or other reference asset.</div>}
+        {loading ? <div className="hub-empty" role="status">Loading assets…</div> : assets.length ? <div className="hub-record-list">{assets.slice(0, 5).map((asset) => <div className="hub-record-row" key={asset.id}><span className="hub-record-icon hub-file"><FileArchive size={16} /></span><span className="hub-record-copy"><strong>{asset.name}</strong><small>{asset.kind} · {asset.space} · {asset.size}</small></span><span className={`status-pill status-${asset.status.toLowerCase()}`}>{asset.status}</span></div>)}</div> : <div className="hub-empty">No files yet. Add a PDF, diagram, recording, or other reference asset.</div>}
       </section>
       <section className="panel knowledge-hub-panel"><div className="hub-panel-heading"><div><div className="eyebrow">LIVE SYSTEMS</div><h2>Connected sources</h2><p>API catalogs, release notes, and operational feeds.</p></div><Button variant="outline" size="small" onClick={onCreateSource}><Plus size={14} />Add source</Button></div>
-        {integrations.length ? <div className="hub-record-list">{integrations.map((integration) => <div className="hub-record-row" key={integration.id}><span className="hub-record-icon hub-source"><Network size={16} /></span><span className="hub-record-copy"><strong>{integration.name}</strong><small>{integration.category} · {integration.lastSynced}</small></span><span className={`status-pill${integration.connected ? ' status-published' : ' status-draft'}`}>{integration.connected ? 'Connected' : 'Setup needed'}</span></div>)}</div> : <div className="hub-empty">No live connectors configured. Add GitHub releases, an OpenAPI catalog, or a status feed.</div>}
+        {loading ? <div className="hub-empty" role="status">Loading connected sources…</div> : integrations.length ? <div className="hub-record-list">{integrations.map((integration) => <div className="hub-record-row" key={integration.id}><span className="hub-record-icon hub-source"><Network size={16} /></span><span className="hub-record-copy"><strong>{integration.name}</strong><small>{integration.category} · {integration.lastSynced}</small></span><span className={`status-pill${integration.connected ? ' status-published' : ' status-draft'}`}>{integration.connected ? 'Connected' : 'Setup needed'}</span></div>)}</div> : <div className="hub-empty">No live connectors configured. Add GitHub releases, an OpenAPI catalog, or a status feed.</div>}
       </section>
       <section className="panel knowledge-hub-panel taxonomy-panel" id="taxonomy-panel"><div className="hub-panel-heading"><div><div className="eyebrow">EXPLICIT METADATA</div><h2>Taxonomy & entities</h2><p>Shared terms help connect knowledge across spaces.</p></div><span className="taxonomy-count">{taxonomyTerms.length} terms</span></div>
         <form className="taxonomy-form" onSubmit={submitTerm}><label className="sr-only" htmlFor="new-taxonomy-term">Add taxonomy term</label><input id="new-taxonomy-term" value={newTerm} onChange={(event) => setNewTerm(event.target.value)} placeholder="Add a tag or entity" /><Button size="small" type="submit" disabled={!newTerm.trim()}><Plus size={14} />Add term</Button></form>
@@ -109,7 +110,7 @@ export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms
           </div>
         </article>
       ))}
-      {models.length === 0 && <div className="empty-state">No knowledge models are stored in Supabase yet.</div>}
+      {loading ? <div className="empty-state" role="status">Loading knowledge models…</div> : models.length === 0 && <div className="empty-state">No knowledge models are stored in Supabase yet.</div>}
     </div>
   </section>
 }

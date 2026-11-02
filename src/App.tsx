@@ -363,7 +363,7 @@ function App() {
     addEvent('Atlas Admin', 'Added taxonomy term', `#${term}`, 'Workspace')
   }
   const changeWorkspaceSettings = async (nextSettings: WorkspaceSettings) => {
-    const { error } = await saveWorkspaceSettings(nextSettings)
+    const { error } = await persistWorkspaceSettings(nextSettings)
     if (error) {
       setWorkspaceDataError(error)
       return
@@ -477,12 +477,7 @@ function App() {
     const { error } = await manageWorkspaceUser('update', { member: user })
     if (error) return error
     setUsers((current) => current.map((existing) => existing.id === user.id ? user : existing))
-    const { data, error: refreshError } = await loadWorkspaceAdminData()
-    if (data) {
-      setAuditEvents(data.events)
-      setAdminSpaces(data.spaces)
-    }
-    setAdminDataError(refreshError)
+    loadedSectionsRef.current.delete('admin')
     return null
   }
   const inviteUser = async (user: Omit<WorkspaceUser, 'id'>) => {
@@ -490,31 +485,21 @@ function App() {
     if (error) return error
     const member = (result as { member?: WorkspaceUser } | null)?.member
     if (member) setUsers((current) => [member, ...current])
-    const { data, error: refreshError } = await loadWorkspaceAdminData()
-    if (data) {
-      setUsers(data.users)
-      setAuditEvents(data.events)
-      setAdminSpaces(data.spaces)
-    }
-    setAdminDataError(refreshError)
+    loadedSectionsRef.current.delete('admin')
     return null
   }
   const setUserStatus = async (userId: string, status: WorkspaceUser['status']) => {
     const { error } = await manageWorkspaceUser('status', { userId, status })
     if (error) return error
     setUsers((current) => current.map((user) => user.id === userId ? { ...user, status } : user))
-    const { data, error: refreshError } = await loadWorkspaceAdminData()
-    if (data) setAuditEvents(data.events)
-    setAdminDataError(refreshError)
+    loadedSectionsRef.current.delete('admin')
     return null
   }
   const deleteUser = async (userId: string) => {
     const { error } = await manageWorkspaceUser('delete', { userId })
     if (error) return error
     setUsers((current) => current.filter((user) => user.id !== userId))
-    const { data, error: refreshError } = await loadWorkspaceAdminData()
-    if (data) setAuditEvents(data.events)
-    setAdminDataError(refreshError)
+    loadedSectionsRef.current.delete('admin')
     return null
   }
   const openCreateForSpace = (spaceName: string) => {
@@ -620,21 +605,22 @@ function App() {
           window.history.replaceState({}, '', nextUrl)
         }
       }} />
-      <main className="page-content">{workspaceDataLoading && <div className="page-loading" role="status">Loading workspace data from Supabase…</div>}{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}<Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
+      <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status"><LoaderCircle className="auth-loading-spinner" size={18} /> Loading workspace data…</div> : <Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
-        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
+        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubDataLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
+        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
-        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
+        {effectiveView === 'article' && articleDetailsLoading && <div className="page-loading" role="status">Loading article…</div>}
+        {effectiveView === 'article' && selectedArticle && !articleDetailsLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
-        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
+        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
-        {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} />}
+        {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} loading={searchGapsLoading} />}
         {effectiveView === 'people' && <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
-        {effectiveView === 'settings' && <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
-        {effectiveView === 'audit' && <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
-      </Suspense></main>
+        {effectiveView === 'settings' && (settingsLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
+        {effectiveView === 'audit' && (adminDataLoading ? <div className="page-loading" role="status">Loading audit events…</div> : <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
+      </Suspense>}</main>
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author={currentUserName} spaces={spaces} initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
@@ -643,7 +629,7 @@ function App() {
   </div>
 }
 
-function AnalyticsView({ articles, zeroResultQueries }: { articles: Article[]; zeroResultQueries: string[] }) {
+function AnalyticsView({ articles, zeroResultQueries, loading }: { articles: Article[]; zeroResultQueries: string[]; loading: boolean }) {
   const statuses = ['Published', 'Under review', 'Draft', 'Archived'].map((status) => ({
     label: status,
     count: articles.filter((article) => article.status === status).length,
@@ -657,7 +643,7 @@ function AnalyticsView({ articles, zeroResultQueries }: { articles: Article[]; z
   return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><button className="date-filter" type="button">Last 30 days <span>⌄</span></button></div>
     <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
     <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
-      <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{zeroResultQueries.length} total</span></div>{zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
+      <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? 'Loading…' : `${zeroResultQueries.length} total`}</span></div>{loading ? <div className="empty-state">Loading search activity…</div> : zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{!loading && zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
     <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => Number.parseFloat(second.views) - Number.parseFloat(first.views)).slice(0, 4)} role="Super Admin" title="" description="" compact />
   </section>
 }
