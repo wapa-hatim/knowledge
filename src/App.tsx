@@ -13,7 +13,7 @@ import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
 import { getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
-import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
+import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
 const SearchResults = lazy(() => import('./features/knowledge/SearchResults').then((module) => ({ default: module.SearchResults })))
@@ -379,10 +379,10 @@ function App() {
           window.history.replaceState({}, '', nextUrl)
         }
       }} />
-      <main className="page-content"><Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
+      <main className="page-content">{workspaceDataLoading && <div className="page-loading" role="status">Loading workspace data from Supabase…</div>}{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}<Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {effectiveView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'models' && <KnowledgeModelsHub models={initialKnowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace('Engineering')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
+        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => setBookmarks((current) => current.includes(selectedArticle.id) ? current.filter((id) => id !== selectedArticle.id) : [...current, selectedArticle.id])} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
