@@ -16,51 +16,13 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
     })
   : null
 
-const atlasDemoCredentials: Record<string, string> = {
-  'admin@atlas.com': 'Admin@123',
-  'spaceadmin@atlas.com': 'Admin@123',
-  'author@atlas.com': 'Admin@123',
-  'reviewer@atlas.com': 'Admin@123',
-  'viewer@atlas.com': 'Admin@123',
-}
-
 export async function signInWithEmail(email: string, password: string) {
   if (!email.trim() || !password.trim()) {
-    return { data: null, error: 'Email and password are required.' }
+    return { data: null, error: 'Enter your work email and password.' }
   }
 
-  const normalizedEmail = email.trim().toLowerCase()
-  const demoPassword = atlasDemoCredentials[normalizedEmail]
-
   if (!supabase) {
-    if (demoPassword && password === demoPassword) {
-      return {
-        data: {
-          user: {
-            email: normalizedEmail,
-            name: normalizedEmail.split('@')[0],
-          },
-        },
-        error: null,
-      }
-    }
-
-    if (normalizedEmail === 'admin@atlas.com' && password === 'Admin@123') {
-      return {
-        data: {
-          user: {
-            email: normalizedEmail,
-            name: 'Atlas Admin',
-          },
-        },
-        error: null,
-      }
-    }
-
-    return {
-      data: null,
-      error: 'Invalid email or password.',
-    }
+    return { data: null, error: 'Sign-in is unavailable. Configure Supabase to continue.' }
   }
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
@@ -77,7 +39,7 @@ export async function resetPassword(email: string) {
   }
 
   if (!supabase) {
-    return { data: { email }, error: null }
+    return { data: null, error: 'Password reset is unavailable. Configure Supabase first.' }
   }
 
   const redirectUrl = new URL(window.location.origin)
@@ -91,6 +53,13 @@ export async function resetPassword(email: string) {
   }
 
   return { data, error: null }
+}
+
+export async function signOut() {
+  if (!supabase) return { error: null }
+
+  const { error } = await supabase.auth.signOut()
+  return { error: error?.message ?? null }
 }
 
 export async function uploadKnowledgeFile(file: File, path?: string) {

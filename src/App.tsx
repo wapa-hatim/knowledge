@@ -1,6 +1,6 @@
-import { lazy, Suspense, useMemo, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { AlertCircle, BookOpenText, FileText, Search } from 'lucide-react'
+import { AlertCircle, BookOpenText, Eye, EyeOff, FileText, LoaderCircle, Search } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
@@ -16,7 +16,7 @@ import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { resetPassword, signInWithEmail } from './lib/supabase'
+import { isSupabaseConfigured, resetPassword, signInWithEmail, signOut, supabase } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -38,25 +38,18 @@ const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadence
 const createAuditEventId = () => `EV-${Date.now()}`
 const createArticleVersionId = () => `V-${Date.now()}`
 const formatTimestamp = () => new Date().toLocaleString()
-const demoRoleByEmail: Record<string, Role> = {
-  'admin@atlas.com': 'Super Admin',
-  'spaceadmin@atlas.com': 'Space Admin',
-  'author@atlas.com': 'Author',
-  'reviewer@atlas.com': 'Reviewer',
-  'viewer@atlas.com': 'Viewer',
-}
-const resolveRoleFromEmail = (email: string): Role => demoRoleByEmail[email.trim().toLowerCase()] ?? 'Viewer'
-const defaultWorkflowUrl = () => {
-  const params = new URLSearchParams(window.location.search)
-  if (params.get('auth') === 'workspace') return false
-  if (params.get('auth') === 'login') return true
-  return true
+const resolveRoleFromMetadata = (role: unknown): Role => {
+  const allowedRoles: Role[] = ['Super Admin', 'Space Admin', 'Author', 'Reviewer', 'Viewer']
+  return typeof role === 'string' && allowedRoles.includes(role as Role) ? role as Role : 'Viewer'
 }
 
 function App() {
   const [role, setRole] = useState<Role>('Super Admin')
   const [activeView, setActiveView] = useState<View>('overview')
-  const [isLoggedOut, setIsLoggedOut] = useState<boolean>(defaultWorkflowUrl())
+  const [isLoggedOut, setIsLoggedOut] = useState(true)
+  const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
@@ -67,7 +60,7 @@ function App() {
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [passwordResetOpen, setPasswordResetOpen] = useState(false)
-  const [resetEmail, setResetEmail] = useState('admin@atlas.com')
+  const [resetEmail, setResetEmail] = useState('')
   const [resetNotice, setResetNotice] = useState('')
   const effectiveView = roleViews[role].includes(activeView) ? activeView : 'overview'
   const [articles, setArticles] = usePersistentState<Article[]>('atlas-articles', storedArticles)
@@ -88,6 +81,39 @@ function App() {
     if (!query) return articles
     return articles.filter((article) => [article.title, article.summary, article.body, article.space, article.category, article.owner, ...article.tags].join(' ').toLowerCase().includes(query))
   }, [articles, search])
+
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+    const shouldShowLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      const session = data.session
+      if (session) setRole(resolveRoleFromMetadata(session.user.app_metadata.role))
+      setIsLoggedOut(shouldShowLogin || !session)
+      setIsAuthLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setIsLoggedOut(true)
+      setIsAuthLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => {
+        if (!active) return
+        if (session) setRole(resolveRoleFromMetadata(session.user.app_metadata.role))
+        const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
+        setIsLoggedOut(forceLogin || !session)
+        setIsAuthLoading(false)
+      }, 0)
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const addEvent = (actor: string, action: string, target: string, type: AuditEvent['type']) => {
     setAuditEvents((current) => [{ id: createAuditEventId(), actor, action, target, type, date: 'Just now' }, ...current])
@@ -195,20 +221,26 @@ function App() {
     const passwordInput = form.querySelector('#login-password') as HTMLInputElement | null
     const email = emailInput?.value ?? ''
     const password = passwordInput?.value ?? ''
-    const { error } = await signInWithEmail(email, password)
-    if (error) {
-      setResetNotice(error)
-      return
-    }
-    const nextRole = resolveRoleFromEmail(email)
-    setRole(nextRole)
+    setIsSubmittingLogin(true)
     setResetNotice('')
-    setIsLoggedOut(false)
-    if (typeof window !== 'undefined') {
-      const nextUrl = new URL(window.location.href)
-      nextUrl.searchParams.set('auth', 'workspace')
-      nextUrl.searchParams.delete('redirect')
-      window.history.replaceState({}, '', nextUrl)
+    try {
+      const { data, error } = await signInWithEmail(email, password)
+      if (error || !data?.user) {
+        setResetNotice(error ?? 'Unable to sign in. Please try again.')
+        return
+      }
+      setRole(resolveRoleFromMetadata(data.user.app_metadata.role))
+      setIsLoggedOut(false)
+      if (typeof window !== 'undefined') {
+        const nextUrl = new URL(window.location.href)
+        nextUrl.searchParams.delete('auth')
+        nextUrl.searchParams.delete('redirect')
+        window.history.replaceState({}, '', nextUrl)
+      }
+    } catch {
+      setResetNotice('Unable to reach the sign-in service. Check your connection and try again.')
+    } finally {
+      setIsSubmittingLogin(false)
     }
   }
   const requestPasswordReset = async (event: FormEvent<HTMLFormElement>) => {
@@ -217,15 +249,18 @@ function App() {
     const { error } = await resetPassword(resetEmail.trim())
     setResetNotice(error ?? `Password reset link sent to ${resetEmail.trim()}.`)
     setPasswordResetOpen(false)
-    setResetEmail('admin@atlas.com')
+    setResetEmail('')
   }
 
-  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in to return to your workspace. This demo stores access in browser state and can be wired to Supabase auth.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="you@company.com" required /><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" placeholder="Enter your password" required /><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)}>Forgot password?</button></div><Button type="submit">Sign in</Button>{resetNotice && <span className="auth-reset-note">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="you@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
+  if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><p>Checking your session…</p></section></main>
+  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
     <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} activeView={effectiveView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={() => {
+      <Topbar role={role} activeView={effectiveView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
+        const { error } = await signOut()
+        if (error) setResetNotice(error)
         setIsLoggedOut(true)
         if (typeof window !== 'undefined') {
           const nextUrl = new URL(window.location.href)
