@@ -50,8 +50,10 @@ export async function resetPassword(email: string) {
     return { data: { email }, error: null }
   }
 
+  const redirectUrl = new URL(window.location.origin)
+  redirectUrl.searchParams.set('auth', 'login')
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: redirectUrl.toString(),
   })
 
   if (error) {
