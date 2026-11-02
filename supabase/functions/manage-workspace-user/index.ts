@@ -77,11 +77,15 @@ Deno.serve(async (request) => {
     if (!email || !email.includes('@')) return response({ error: 'Enter a valid work email.' }, 400)
     if (!roles.includes(role as typeof roles[number]) || role === 'Super Admin') return response({ error: 'Choose a permitted member role.' }, 400)
 
-    let spaceId: string | null = null
+    let targetSpaceIds: string[] = []
     if (space !== 'All spaces') {
       const { data: spaceRow, error: spaceError } = await admin.from('spaces').select('id').eq('name', space).single()
       if (spaceError || !spaceRow) return response({ error: spaceError?.message ?? 'The selected space does not exist.' }, 400)
-      spaceId = spaceRow.id
+      targetSpaceIds = [spaceRow.id]
+    } else if (role !== 'Super Admin') {
+      const { data: allSpaces, error: spacesError } = await admin.from('spaces').select('id')
+      if (spacesError) return response({ error: spacesError.message }, 500)
+      targetSpaceIds = (allSpaces ?? []).map((spaceRow) => spaceRow.id)
     }
 
     const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } })
@@ -100,13 +104,13 @@ Deno.serve(async (request) => {
       return response({ error: profileError.message }, 500)
     }
 
-    if (spaceId) {
-      const { error: membershipError } = await admin.from('space_members').upsert({
-        space_id: spaceId,
+    if (targetSpaceIds.length) {
+      const { error: membershipError } = await admin.from('space_members').upsert(targetSpaceIds.map((space_id) => ({
+        space_id,
         user_id: inviteData.user.id,
         role: role === 'Space Admin' ? 'Space Admin' : 'Member',
         added_by: authData.user.id,
-      }, { onConflict: 'space_id,user_id' })
+      })), { onConflict: 'space_id,user_id' })
       if (membershipError) {
         await admin.auth.admin.deleteUser(inviteData.user.id)
         return response({ error: membershipError.message }, 500)
@@ -123,11 +127,15 @@ Deno.serve(async (request) => {
     if (!roles.includes(member.role as typeof roles[number])) return response({ error: 'Choose a valid role.' }, 400)
 
     const space = member.space?.trim() || 'All spaces'
-    let spaceId: string | null = null
+    let targetSpaceIds: string[] = []
     if (space !== 'All spaces') {
       const { data: spaceRow, error: spaceError } = await admin.from('spaces').select('id').eq('name', space).single()
       if (spaceError || !spaceRow) return response({ error: spaceError?.message ?? 'The selected space does not exist.' }, 400)
-      spaceId = spaceRow.id
+      targetSpaceIds = [spaceRow.id]
+    } else if (member.role !== 'Super Admin') {
+      const { data: allSpaces, error: spacesError } = await admin.from('spaces').select('id')
+      if (spacesError) return response({ error: spacesError.message }, 500)
+      targetSpaceIds = (allSpaces ?? []).map((spaceRow) => spaceRow.id)
     }
 
     const { data: oldProfile, error: readError } = await admin.from('profiles').select('display_name, department, role').eq('id', member.id).single()
@@ -144,13 +152,13 @@ Deno.serve(async (request) => {
 
     const { error: membershipDeleteError } = await admin.from('space_members').delete().eq('user_id', member.id)
     let membershipError = membershipDeleteError
-    if (!membershipError && spaceId) {
-      const { error } = await admin.from('space_members').insert({
-        space_id: spaceId,
+    if (!membershipError && targetSpaceIds.length) {
+      const { error } = await admin.from('space_members').insert(targetSpaceIds.map((space_id) => ({
+        space_id,
         user_id: member.id,
         role: member.role === 'Space Admin' ? 'Space Admin' : 'Member',
         added_by: authData.user.id,
-      })
+      })))
       membershipError = error
     }
     if (membershipError) {

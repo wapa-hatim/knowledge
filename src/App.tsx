@@ -12,7 +12,7 @@ import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialo
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { createIntegrationRecord, createSpaceRecord, createTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { createIntegrationRecord, createSpaceRecord, createTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -327,6 +327,11 @@ function App() {
     }
     updateArticle(selectedArticle.id, (article) => ({ ...article, comments: [...(article.comments ?? []), comment] }))
   }
+  const addArticleFeedback = async (helpful: boolean, feedback: string) => {
+    if (!selectedArticle) return
+    const { error } = await saveArticleFeedback(selectedArticle.id, helpful, feedback)
+    if (error) setWorkspaceDataError(error)
+  }
   const restoreArticleVersion = async (version: ArticleVersion) => {
     if (!selectedArticle) return
     const updatedArticle = { ...selectedArticle, body: version.body, status: version.status, updated: 'Just now' }
@@ -470,7 +475,7 @@ function App() {
         {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
-        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
+        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onCreateSpace={createSpaceItem} />}
         {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
@@ -488,12 +493,21 @@ function App() {
 }
 
 function AnalyticsView({ articles, zeroResultQueries }: { articles: Article[]; zeroResultQueries: string[] }) {
-  const bars = [38, 58, 46, 74, 61, 88, 70, 96, 65, 81, 57, 91]
+  const statuses = ['Published', 'Under review', 'Draft', 'Archived'].map((status) => ({
+    label: status,
+    count: articles.filter((article) => article.status === status).length,
+  }))
+  const maxStatusCount = Math.max(1, ...statuses.map((status) => status.count))
+  const totalViews = articles.reduce((total, article) => {
+    const rawViews = article.views.toLowerCase().replaceAll(',', '')
+    const value = Number.parseFloat(rawViews)
+    return total + (Number.isNaN(value) ? 0 : rawViews.endsWith('k') ? value * 1000 : value)
+  }, 0)
   return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><button className="date-filter" type="button">Last 30 days <span>⌄</span></button></div>
-    <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">18,492</div><div className="metric-delta">↗ 12.8% from last month</div></article><article className="metric-card"><div className="metric-top"><span>Search success</span><span className="metric-icon tone-mint"><Search size={17} /></span></div><div className="metric-value">92.4%</div><div className="metric-delta">↗ 3.2% from last month</div></article><article className="metric-card"><div className="metric-top"><span>Unanswered searches</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">137</div><div className="metric-delta">↘ 8.1% from last month</div></article></div>
-    <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Knowledge activity</h2><p>Views and contributions over time</p></div><span className="chart-legend"><i /> Views</span></div><div className="bar-chart" aria-label="Article views over the last twelve weeks">{bars.map((height, index) => <div className="chart-column" key={index}><span style={{ height: `${height}%` }} /><small>W{index + 1}</small></div>)}</div></article>
-      <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Queries without a useful result</p></div><span className="count-label">{137 + zeroResultQueries.length} total</span></div>{[...zeroResultQueries, 'vpn access for contractors', 'travel policy exception', 'rotate staging credentials'].slice(0, 4).map((query, index) => <div className="gap-row" key={query}><span>{query}</span><strong>{[1, 24, 18, 12][index]}</strong></div>)}</article></div>
-    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={articles.slice(0, 4)} role="Super Admin" title="" description="" compact />
+    <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
+    <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
+      <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{zeroResultQueries.length} total</span></div>{zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
+    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => Number.parseFloat(second.views) - Number.parseFloat(first.views)).slice(0, 4)} role="Super Admin" title="" description="" compact />
   </section>
 }
 

@@ -267,7 +267,14 @@ export async function saveArticleRecord(article: Article) {
   if (userError || !userId) return { error: userError }
   const { id: spaceId, error: spaceError } = await getSpaceId(article.space)
   if (spaceError || !spaceId) return { error: spaceError ?? 'Choose an existing space.' }
-  const { data: category } = await supabase.from('categories').select('id').eq('space_id', spaceId).eq('name', article.category).maybeSingle()
+  let { data: category, error: categoryError } = await supabase.from('categories').select('id').eq('space_id', spaceId).eq('name', article.category).maybeSingle()
+  if (categoryError) return { error: categoryError.message }
+  if (!category && article.category && article.category !== 'Uncategorized') {
+    const result = await supabase.from('categories').insert({ space_id: spaceId, name: article.category }).select('id').single()
+    category = result.data
+    categoryError = result.error
+    if (categoryError) return { error: categoryError.message }
+  }
   const record = {
     space_id: spaceId,
     category_id: category?.id ?? null,
@@ -277,6 +284,7 @@ export async function saveArticleRecord(article: Article) {
     status: article.status,
     tags: article.tags,
     review_due_at: article.reviewDue && article.reviewDue !== 'Not scheduled' ? new Date(article.reviewDue).toISOString() : null,
+    published_at: article.status === 'Published' ? new Date().toISOString() : null,
   }
   const { data: existing } = await supabase.from('articles').select('id').eq('id', article.id).maybeSingle()
   const result = existing
@@ -290,6 +298,19 @@ export async function saveArticleComment(articleId: string, body: string) {
   const { id: userId, error: userError } = await getAuthenticatedUserId()
   if (userError || !userId) return { error: userError }
   const { error } = await supabase.from('article_comments').insert({ article_id: articleId, author_id: userId, body })
+  return { error: error?.message ?? null }
+}
+
+export async function saveArticleFeedback(articleId: string, helpful: boolean, feedback = '') {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('article_feedback').upsert({
+    article_id: articleId,
+    user_id: userId,
+    helpful,
+    feedback,
+  }, { onConflict: 'article_id,user_id' })
   return { error: error?.message ?? null }
 }
 

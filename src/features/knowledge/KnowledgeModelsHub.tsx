@@ -16,12 +16,6 @@ interface KnowledgeModelsHubProps {
   onAddTaxonomyTerm: (term: string) => void
 }
 
-const modelHighlights = [
-  { label: 'Managed models', value: '8', delta: '+2 this quarter', icon: Layers3, tone: 'tone-mint' },
-  { label: 'Templates in use', value: '14', delta: 'Across 5 spaces', icon: BookOpenText, tone: 'tone-blue' },
-  { label: 'Coverage', value: '92%', delta: 'Indexed and searchable', icon: ShieldCheck, tone: 'tone-peach' },
-]
-
 const knowledgeTypes = [
   { title: 'Structured content', detail: 'Articles, SOPs, FAQs, specs', icon: BookOpenText, tone: 'tone-mint', action: 'Create document' },
   { title: 'Unstructured assets', detail: 'PDFs, video, audio, diagrams', icon: FileArchive, tone: 'tone-blue', action: 'Upload asset' },
@@ -32,6 +26,11 @@ const knowledgeTypes = [
 
 export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms, onNavigate, onCreateArticle, onCreateAsset, onCreateSource, onAddTaxonomyTerm }: KnowledgeModelsHubProps) {
   const [newTerm, setNewTerm] = useState('')
+  const modelHighlights = [
+    { label: 'Managed models', value: models.filter((model) => model.status === 'Managed').length, delta: 'From Supabase', icon: Layers3, tone: 'tone-mint' },
+    { label: 'Templates in use', value: models.length, delta: 'Stored workspace models', icon: BookOpenText, tone: 'tone-blue' },
+    { label: 'Assets indexed', value: assets.filter((asset) => asset.status === 'Indexed').length, delta: `${assets.length} stored assets`, icon: ShieldCheck, tone: 'tone-peach' },
+  ]
   const submitTerm = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const term = newTerm.trim().replace(/^#/, '').toLowerCase()
@@ -81,7 +80,7 @@ export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms
         <form className="taxonomy-form" onSubmit={submitTerm}><label className="sr-only" htmlFor="new-taxonomy-term">Add taxonomy term</label><input id="new-taxonomy-term" value={newTerm} onChange={(event) => setNewTerm(event.target.value)} placeholder="Add a tag or entity" /><Button size="small" type="submit" disabled={!newTerm.trim()}><Plus size={14} />Add term</Button></form>
         <div className="taxonomy-terms">{taxonomyTerms.map((term) => <span key={term}>#{term}</span>)}</div>
       </section>
-      <section className="panel knowledge-hub-panel ai-context-panel"><div className="hub-panel-heading"><div><div className="eyebrow">AI CONTEXT</div><h2>Retrieval readiness</h2><p>Context and source coverage for grounded answers.</p></div><span className="hub-ai-icon"><SearchCheck size={17} /></span></div><div className="retrieval-stats"><div><strong>{models.length + assets.length + integrations.length}</strong><span>knowledge formats</span></div><div><strong>{taxonomyTerms.length}</strong><span>search terms</span></div><div><strong>On-device</strong><span>demo context only</span></div></div><div className="asset-note">Vector embeddings, indexing pipelines, and cited AI answers require a connected search and generation service.</div></section>
+      <section className="panel knowledge-hub-panel ai-context-panel"><div className="hub-panel-heading"><div><div className="eyebrow">AI CONTEXT</div><h2>Retrieval readiness</h2><p>Context and source coverage for grounded answers.</p></div><span className="hub-ai-icon"><SearchCheck size={17} /></span></div><div className="retrieval-stats"><div><strong>{models.length + assets.length + integrations.length}</strong><span>knowledge records</span></div><div><strong>{taxonomyTerms.length}</strong><span>search terms</span></div><div><strong>Not configured</strong><span>vector retrieval</span></div></div><div className="asset-note">Vector embeddings, indexing pipelines, and cited AI answers require a connected search and generation service.</div></section>
     </div>
 
     <div className="knowledge-models-grid">
@@ -110,6 +109,7 @@ export function KnowledgeModelsHub({ models, assets, integrations, taxonomyTerms
           </div>
         </article>
       ))}
+      {models.length === 0 && <div className="empty-state">No knowledge models are stored in Supabase yet.</div>}
     </div>
   </section>
 }
