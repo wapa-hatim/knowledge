@@ -370,7 +370,7 @@ export async function loadQuestionData() {
   const error = spacesResult.error ?? questionsResult.error ?? answersResult.error ?? voteCountsResult.error ?? questionVotesResult.error ?? answerVotesResult.error ?? profilesResult.error
   if (error) return { data: null, error: error.message }
   const spaces = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
-  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const profiles = mapWorkspaceMembers(profilesResult.data)
   const countRows = (voteCountsResult.data ?? []) as { vote_type: string; target_id: string; vote_count: number | string }[]
   const counts = new Map<string, number>(countRows.map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
   const questionVotes = new Set((questionVotesResult.data ?? []).map((vote) => vote.question_id))
