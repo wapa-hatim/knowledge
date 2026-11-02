@@ -1,9 +1,11 @@
-import { BookOpenCheck, ChartNoAxesCombined, CircleHelp, FileStack, LayoutDashboard, MessageSquareText, PanelsTopLeft, ScrollText, Settings2, ShieldCheck, Users } from 'lucide-react'
+import { BookOpenCheck, BookOpenText, ChartNoAxesCombined, CircleHelp, FileStack, LayoutDashboard, MessageSquareText, PanelsTopLeft, ScrollText, Settings2, ShieldCheck, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { KnowledgeSpace, Role, View } from '../../types'
 
 const navigation: { label: string; view: View; icon: LucideIcon; roles?: Role[]; count?: string }[] = [
-  { label: 'Overview', view: 'overview', icon: LayoutDashboard }, { label: 'Knowledge library', view: 'library', icon: FileStack },
+  { label: 'Overview', view: 'overview', icon: LayoutDashboard },
+  { label: 'Knowledge library', view: 'library', icon: FileStack },
+  { label: 'Formats & models', view: 'models', icon: BookOpenText, roles: ['Super Admin', 'Space Admin', 'Author'] },
   { label: 'Review queue', view: 'reviews', icon: ShieldCheck, roles: ['Super Admin', 'Space Admin', 'Reviewer'], count: '8' },
   { label: 'Questions & answers', view: 'questions', icon: MessageSquareText }, { label: 'Explore spaces', view: 'spaces', icon: PanelsTopLeft },
   { label: 'Analytics', view: 'analytics', icon: ChartNoAxesCombined, roles: ['Super Admin', 'Space Admin'] },

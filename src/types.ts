@@ -1,5 +1,5 @@
 export type Role = 'Super Admin' | 'Space Admin' | 'Author' | 'Reviewer' | 'Viewer'
-export type View = 'overview' | 'library' | 'reviews' | 'questions' | 'analytics' | 'spaces' | 'people' | 'settings' | 'audit' | 'search' | 'article' | 'question'
+export type View = 'overview' | 'library' | 'models' | 'reviews' | 'questions' | 'analytics' | 'spaces' | 'people' | 'settings' | 'audit' | 'search' | 'article' | 'question'
 export type ArticleStatus = 'Published' | 'Under review' | 'Draft' | 'Archived'
 export interface Article { id: string; title: string; summary: string; space: string; category: string; owner: string; updated: string; status: ArticleStatus; views: string; tags: string[]; initials: string; color: string; body?: string; reviewDue?: string; comments?: ArticleComment[]; versions?: ArticleVersion[] }
 
@@ -75,4 +75,35 @@ export interface WorkspaceSettings {
 	notifyOwners: boolean
 	allowGuestQuestions: boolean
 	defaultArticleVisibility: 'Space members' | 'All workspace members'
+}
+
+export interface KnowledgeAsset {
+	id: string
+	name: string
+	kind: 'PDF' | 'DOCX' | 'Spreadsheet' | 'Slides' | 'Video' | 'Diagram' | 'Audio' | 'OpenAPI' | 'Release notes'
+	space: string
+	size: string
+	updated: string
+	status: 'Indexed' | 'Processing' | 'Synced'
+}
+
+export interface KnowledgeModel {
+	id: string
+	name: string
+	format: 'Article' | 'Playbook' | 'Policy' | 'Runbook' | 'Template' | 'FAQ' | 'Decision record' | 'Architecture design'
+	description: string
+	owner: string
+	audience: string
+	useCases: string[]
+	coverage: string
+	status: 'Managed' | 'Ready for review' | 'Draft'
+}
+
+export interface KnowledgeIntegration {
+	id: string
+	name: string
+	description: string
+	category: 'Repository' | 'API catalog' | 'Operations'
+	connected: boolean
+	lastSynced: string
 }

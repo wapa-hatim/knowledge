@@ -41,3 +41,23 @@ select {
 .admin-metric-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+
+.metric-card:has(.tone-mint) {
+  border-color: color-mix(in srgb, #c5dfcc 60%, transparent);
+  background-color: color-mix(in srgb, #e9f4ed 58%, transparent);
+}
+
+.metric-card:has(.tone-blue) {
+  border-color: color-mix(in srgb, #c8dceb 60%, transparent);
+  background-color: color-mix(in srgb, #eaf2f8 58%, transparent);
+}
+
+.metric-card:has(.tone-peach) {
+  border-color: color-mix(in srgb, #eed8c3 60%, transparent);
+  background-color: color-mix(in srgb, #fbf0e5 58%, transparent);
+}
+
+.metric-card:has(.tone-lilac) {
+  border-color: color-mix(in srgb, #dfd4e8 60%, transparent);
+  background-color: color-mix(in srgb, #f2edf6 58%, transparent);
+}

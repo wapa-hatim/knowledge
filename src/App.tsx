@@ -7,7 +7,9 @@ import { CreateArticleDialog } from './features/knowledge/CreateArticleDialog'
 import { KnowledgeTable } from './features/knowledge/KnowledgeTable'
 import { articleBodies, initialArticles } from './data/knowledge'
 import { initialAuditEvents, initialQuestions, initialSpaces, initialUsers } from './data/workspace'
+import { initialKnowledgeModels } from './data/knowledgeModels'
 import { usePersistentState } from './hooks/usePersistentState'
+import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -17,10 +19,10 @@ const QuestionsView = lazy(() => import('./features/questions/QuestionsView').th
 const AdminView = lazy(() => import('./features/admin/AdminView').then((module) => ({ default: module.AdminView })))
 
 const roleViews: Record<Role, View[]> = {
-  'Super Admin': ['overview', 'library', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'audit', 'search', 'article', 'question'],
-  'Space Admin': ['overview', 'library', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'search', 'article', 'question'],
-  Author: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question'],
-  Reviewer: ['overview', 'library', 'reviews', 'questions', 'spaces', 'search', 'article', 'question'],
+  'Super Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'audit', 'search', 'article', 'question'],
+  'Space Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'search', 'article', 'question'],
+  Author: ['overview', 'library', 'models', 'questions', 'spaces', 'search', 'article', 'question'],
+  Reviewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question'],
   Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question'],
 }
 
@@ -132,6 +134,7 @@ function App() {
       <main className="page-content"><Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {activeView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {activeView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
+        {activeView === 'models' && <KnowledgeModelsHub models={initialKnowledgeModels} onNavigate={setActiveView} />}
         {activeView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {activeView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {activeView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => setBookmarks((current) => current.includes(selectedArticle.id) ? current.filter((id) => id !== selectedArticle.id) : [...current, selectedArticle.id])} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
