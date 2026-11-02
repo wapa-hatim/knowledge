@@ -12,6 +12,7 @@ const createCommentId = () => `C-${Date.now()}`
 interface ArticleDetailProps {
   article: Article
   role: Role
+  currentUserName: string
   bookmarked: boolean
   onBack: () => void
   onBookmark: () => void
@@ -22,7 +23,7 @@ interface ArticleDetailProps {
   onRestoreVersion: (version: ArticleVersion) => void
 }
 
-export function ArticleDetail({ article, role, bookmarked, onBack, onBookmark, onAutosave, onSaveVersion, onStatusChange, onComment, onRestoreVersion }: ArticleDetailProps) {
+export function ArticleDetail({ article, role, currentUserName, bookmarked, onBack, onBookmark, onAutosave, onSaveVersion, onStatusChange, onComment, onRestoreVersion }: ArticleDetailProps) {
   const [editing, setEditing] = useState(false)
   const [comment, setComment] = useState('')
   const [showHistory, setShowHistory] = useState(false)
@@ -35,7 +36,7 @@ export function ArticleDetail({ article, role, bookmarked, onBack, onBookmark, o
 
   const submitComment = () => {
     if (!comment.trim()) return
-    onComment({ id: createCommentId(), author: 'Atlas Admin', body: comment.trim(), createdAt: 'Just now' })
+    onComment({ id: crypto.randomUUID(), author: currentUserName, body: comment.trim(), createdAt: 'Just now' })
     setComment('')
   }
 
@@ -45,7 +46,7 @@ export function ArticleDetail({ article, role, bookmarked, onBack, onBookmark, o
     <div className="detail-topline"><button className="back-action" onClick={onBack} type="button"><ArrowLeft size={15} />Knowledge library</button><span className="article-id">{article.id}</span></div>
     <div className="article-layout"><article className="article-main"><div className="article-heading"><div className="article-crumb"><span>{article.space}</span><span>/</span><span>{article.category}</span></div><div className="article-title-row"><h1>{article.title}</h1><button className={`bookmark-action${bookmarked ? ' bookmarked' : ''}`} onClick={onBookmark} type="button" aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark article'}><Bookmark size={18} fill={bookmarked ? 'currentColor' : 'none'} /></button></div><p className="article-summary">{article.summary}</p><div className="article-byline"><span className={`owner-avatar owner-${article.color}`}>{article.initials}</span><strong>{article.owner}</strong><span>Updated {article.updated.toLowerCase()}</span><span className={`status-pill status-${article.status.toLowerCase().replace(' ', '-')}`}><i />{article.status}</span></div></div>
       <div className="article-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown></div>
-      <div className="article-feedback"><div><strong>Was this article helpful?</strong><span>Your feedback helps keep knowledge useful.</span></div><button type="button" onClick={() => onComment({ id: createCommentId(), author: 'Atlas Admin', body: 'Marked helpful', createdAt: 'Just now' })}><Check size={14} />Yes, helpful</button><button type="button" onClick={() => onComment({ id: createCommentId(), author: 'Atlas Admin', body: 'Needs improvement', createdAt: 'Just now' })}>Needs work</button></div>
+      <div className="article-feedback"><div><strong>Was this article helpful?</strong><span>Your feedback helps keep knowledge useful.</span></div><button type="button" onClick={() => onComment({ id: crypto.randomUUID(), author: currentUserName, body: 'Marked helpful', createdAt: 'Just now' })}><Check size={14} />Yes, helpful</button><button type="button" onClick={() => onComment({ id: crypto.randomUUID(), author: currentUserName, body: 'Needs improvement', createdAt: 'Just now' })}>Needs work</button></div>
       <section className="comments-section"><div className="section-title-row"><div><h2>Discussion <span>{article.comments?.length ?? 0}</span></h2><p>Share context or ask the owner a question.</p></div></div><div className="comment-compose"><div className="profile-avatar">AY</div><input value={comment} onChange={(event) => setComment(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitComment() }} placeholder="Write a comment or @mention a teammate…" aria-label="Write a comment" /><button type="button" onClick={submitComment} aria-label="Post comment"><Send size={15} /></button></div>{article.comments?.map((item) => <article className="comment-row" key={item.id}><div className="profile-avatar">{item.author.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div><div><p><strong>{item.author}</strong><span>{item.createdAt}</span></p><div>{item.body}</div></div></article>)}</section>
     </article>
     <aside className="article-sidebar"><div className="article-actions-panel"><div className="eyebrow">ARTICLE ACTIONS</div>{canEdit && <button type="button" onClick={() => setEditing(true)}><Pencil size={15} />Edit article</button>}{article.status === 'Draft' && canEdit && <button type="button" onClick={() => onStatusChange('Under review')}><ShieldCheck size={15} />Request review</button>}{article.status === 'Under review' && canReview && <button type="button" className="publish-action" onClick={() => onStatusChange('Published')}><Check size={15} />Approve & publish</button>}{canEdit && <button type="button" onClick={() => setShowHistory((value) => !value)}><GitCompare size={15} />Version history <span>{versions.length}</span></button>}{canReview && article.status === 'Published' && <button type="button" onClick={() => onStatusChange('Archived')}><Clock3 size={15} />Archive article</button>}</div>

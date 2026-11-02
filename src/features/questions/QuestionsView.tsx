@@ -4,9 +4,9 @@ import type { KnowledgeQuestion, Role } from '../../types'
 import { Button } from '../../components/ui/Button'
 import '../spaces/workspace-pages.css'
 
-interface QuestionsViewProps { questions: KnowledgeQuestion[]; spaces: { name: string }[]; role: Role; initialSpace?: string; onQuestionsChange: (questions: KnowledgeQuestion[]) => Promise<KnowledgeQuestion[] | null> }
+interface QuestionsViewProps { questions: KnowledgeQuestion[]; spaces: { name: string }[]; role: Role; currentUserName: string; initialSpace?: string; onQuestionsChange: (questions: KnowledgeQuestion[]) => Promise<KnowledgeQuestion[] | null> }
 
-export function QuestionsView({ questions, spaces, role, initialSpace = '', onQuestionsChange }: QuestionsViewProps) {
+export function QuestionsView({ questions, spaces, role, currentUserName, initialSpace = '', onQuestionsChange }: QuestionsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
   const [title, setTitle] = useState('')
@@ -23,7 +23,7 @@ export function QuestionsView({ questions, spaces, role, initialSpace = '', onQu
   const updateQuestion = (id: string, update: (question: KnowledgeQuestion) => KnowledgeQuestion) => onQuestionsChange(questions.map((question) => question.id === id ? update(question) : question))
   const submitQuestion = async () => {
     if (!title.trim() || !body.trim() || !space) return
-    const newQuestion: KnowledgeQuestion = { id: crypto.randomUUID(), title: title.trim(), body: body.trim(), space, tags: [], author: 'You', createdAt: 'Just now', votes: 0, answers: [] }
+    const newQuestion: KnowledgeQuestion = { id: crypto.randomUUID(), title: title.trim(), body: body.trim(), space, tags: [], author: currentUserName, createdAt: 'Just now', votes: 0, answers: [] }
     const savedQuestions = await onQuestionsChange([newQuestion, ...questions])
     if (!savedQuestions) return
     setSelectedId(newQuestion.id)
@@ -33,7 +33,7 @@ export function QuestionsView({ questions, spaces, role, initialSpace = '', onQu
   }
   const submitAnswer = async () => {
     if (!selectedQuestion || !answer.trim()) return
-    const nextQuestions = questions.map((question) => question.id === selectedQuestion.id ? { ...question, answers: [...question.answers, { id: crypto.randomUUID(), author: 'You', body: answer.trim(), votes: 0, verified: false }] } : question)
+    const nextQuestions = questions.map((question) => question.id === selectedQuestion.id ? { ...question, answers: [...question.answers, { id: crypto.randomUUID(), author: currentUserName, body: answer.trim(), votes: 0, verified: false }] } : question)
     const savedQuestions = await onQuestionsChange(nextQuestions)
     if (!savedQuestions) return
     setAnswer('')

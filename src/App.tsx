@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { AlertCircle, BookOpenText, Eye, EyeOff, FileText, LoaderCircle, Search } from 'lucide-react'
+import { BookOpenText, Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
@@ -55,6 +55,7 @@ const resolveRoleFromMetadata = (role: unknown): Role => {
 
 function App() {
   const [role, setRole] = useState<Role>('Viewer')
+  const [currentUserName, setCurrentUserName] = useState('')
   const [activeView, setActiveView] = useState<View>('overview')
   const [isLoggedOut, setIsLoggedOut] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
@@ -114,6 +115,7 @@ function App() {
         const { data: workspaceData, error: workspaceError } = await loadWorkspaceData(nextRole)
         if (active) {
           setArticles(workspaceData?.articles ?? [])
+          setCurrentUserName(workspaceData?.currentUserName ?? '')
           setQuestions(workspaceData?.questions ?? [])
           setSpaces(workspaceData?.spaces ?? [])
           setKnowledgeAssets(workspaceData?.assets ?? [])
@@ -145,6 +147,7 @@ function App() {
         }
       } else {
         setArticles([])
+        setCurrentUserName('')
         setQuestions([])
         setSpaces([])
         setKnowledgeAssets([])
@@ -449,9 +452,9 @@ function App() {
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
-    <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
+    <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} userName={currentUserName} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
+      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
         const { error } = await signOut()
         if (error) setResetNotice(error)
         setIsLoggedOut(true)
@@ -462,14 +465,14 @@ function App() {
         }
       }} />
       <main className="page-content">{workspaceDataLoading && <div className="page-loading" role="status">Loading workspace data from Supabase…</div>}{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}<Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
-        {effectiveView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
-        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
+        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onCreateSpace={createSpaceItem} />}
-        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
+        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
         {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} />}
         {effectiveView === 'people' && <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
@@ -477,7 +480,7 @@ function App() {
         {effectiveView === 'audit' && <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
       </Suspense></main>
     </div>
-    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Atlas Admin" spaces={spaces} initialSpace={createSpace} />
+    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author={currentUserName} spaces={spaces} initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
