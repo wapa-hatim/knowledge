@@ -1,7 +1,8 @@
-import { BookOpenCheck, BookOpenText, ChartNoAxesCombined, ChevronDown, CircleHelp, FileStack, LayoutDashboard, MessageSquareText, PanelsTopLeft, ScrollText, Settings2, ShieldCheck, Users } from 'lucide-react'
+import { BookOpenCheck, BookOpenText, ChartNoAxesCombined, ChevronDown, CircleHelp, FileStack, LayoutDashboard, MessageSquareText, PanelsTopLeft, Plus, ScrollText, Settings2, ShieldCheck, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import type { KnowledgeSpace, Role, View } from '../../types'
+import './sidebar.css'
 
 const navigation: { label: string; view: View; icon: LucideIcon; roles?: Role[]; count?: string }[] = [
   { label: 'Overview', view: 'overview', icon: LayoutDashboard },
@@ -23,27 +24,31 @@ interface SidebarProps {
   role: Role
   userName: string
   spaces: KnowledgeSpace[]
+  selectedSpaceName: string | null
+  onSelectSpace: (name: string | null) => void
   onOpenSpace: (name: string) => void
   onCreateSpace: () => void
 }
 
-export function Sidebar({ activeView, onNavigate, role, userName, spaces, onOpenSpace, onCreateSpace }: SidebarProps) {
-  const [spacesExpanded, setSpacesExpanded] = useState(true)
+export function Sidebar({ activeView, onNavigate, role, userName, spaces, selectedSpaceName, onSelectSpace, onOpenSpace, onCreateSpace }: SidebarProps) {
+  const [spacesExpanded, setSpacesExpanded] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const selectedSpace = spaces.find((space) => space.name === selectedSpaceName)
+  const workspaceTitle = selectedSpace?.name ?? 'Atlas Knowledge'
 
   return <aside className="sidebar"><div className="brand-lockup"><div className="brand-mark"><BookOpenCheck size={19} /></div><span>atlas<span className="brand-period">.</span></span></div>
     <details className="workspace-menu" open={workspaceMenuOpen} onToggle={(event) => setWorkspaceMenuOpen(event.currentTarget.open)}>
-      <summary className="workspace-switcher" aria-label="Current workspace: Atlas Knowledge">
-        <span className="workspace-avatar">A</span>
-        <span className="workspace-name"><strong>Atlas Knowledge</strong><small>Knowledge workspace</small></span>
+      <summary className="workspace-switcher" aria-label={`Current location: ${workspaceTitle}`}>
+        <span className="workspace-avatar">{workspaceTitle[0]}</span>
+        <span className="workspace-name"><strong>{workspaceTitle}</strong><small>{selectedSpace ? 'Knowledge space' : 'Knowledge workspace'}</small></span>
         <span className="workspace-chevron"><ChevronDown size={14} /></span>
       </summary>
       <div className="workspace-menu-panel">
-        <button type="button" className="workspace-option active" onClick={() => { onNavigate('overview'); setWorkspaceMenuOpen(false) }}>
+        <button type="button" className={`workspace-option${selectedSpace ? '' : ' active'}`} onClick={() => { onSelectSpace(null); onNavigate('overview'); setWorkspaceMenuOpen(false) }}>
           <span className="workspace-option-label">Atlas Knowledge</span>
           <span className="workspace-option-pill">Workspace</span>
         </button>
-        {spaces.map((space) => <button type="button" className="workspace-option" key={space.name} onClick={() => { onOpenSpace(space.name); setWorkspaceMenuOpen(false) }}>
+        {spaces.map((space) => <button type="button" className={`workspace-option${selectedSpaceName === space.name ? ' active' : ''}`} key={space.name} onClick={() => { onOpenSpace(space.name); setWorkspaceMenuOpen(false) }}>
           <span className="workspace-option-label">{space.name}</span>
           <span className="workspace-option-dot" style={{ background: space.color === 'green' ? '#66b98a' : space.color === 'orange' ? '#d89c5f' : space.color === 'blue' ? '#73a7d1' : space.color === 'pink' ? '#d38ec0' : '#8f87c9' }} />
         </button>)}
@@ -57,7 +62,7 @@ export function Sidebar({ activeView, onNavigate, role, userName, spaces, onOpen
         <button className="spaces-accordion-trigger" type="button" aria-expanded={spacesExpanded} aria-controls="sidebar-space-list" onClick={() => setSpacesExpanded((expanded) => !expanded)}>
           <PanelsTopLeft size={15} /><span>YOUR SPACES</span><ChevronDown className="spaces-chevron" size={14} />
         </button>
-        {role === 'Super Admin' && <button className="space-create-button" type="button" onClick={onCreateSpace} aria-label="Create a space">+</button>}
+        {role === 'Super Admin' && <button className="space-create-button" type="button" onClick={onCreateSpace} aria-label="Create a space"><Plus size={13} /><span>New</span></button>}
       </div>
       {spacesExpanded && <div className="sidebar-spaces-list" id="sidebar-space-list">{spaces.map((space) => <button className="space-link" type="button" key={space.name} onClick={() => onOpenSpace(space.name)}><i className={`space-dot dot-${space.color}`} /><span className="sidebar-space-name">{space.name}</span><span>{space.articleCount}</span></button>)}{spaces.length === 0 && <span className="spaces-empty">No spaces yet</span>}</div>}
     </div>

@@ -252,14 +252,15 @@ export async function loadWorkspaceData(role: Role) {
 export async function loadCoreWorkspaceData(userId: string) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
 
-  const [spacesResult, categoriesResult, articlesResult, bookmarksResult, profilesResult] = await Promise.all([
+  const [spacesResult, categoriesResult, articlesResult, bookmarksResult, profilesResult, eventsResult] = await Promise.all([
     supabase.from('spaces').select('id, name, description, color, owner_id, parent_id').order('name'),
     supabase.from('categories').select('id, space_id, name, parent_id').order('name'),
     supabase.from('articles').select('id, space_id, category_id, title, summary, status, owner_id, author_id, tags, view_count, review_due_at, updated_at').order('updated_at', { ascending: false }).limit(1000),
     supabase.from('bookmarks').select('article_id').eq('user_id', userId),
     supabase.from('profiles').select('id, display_name'),
+    supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(5),
   ])
-  const error = spacesResult.error ?? categoriesResult.error ?? articlesResult.error ?? bookmarksResult.error ?? profilesResult.error
+  const error = spacesResult.error ?? categoriesResult.error ?? articlesResult.error ?? bookmarksResult.error ?? profilesResult.error ?? eventsResult.error
   if (error) return { data: null, error: error.message }
 
   const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
@@ -306,12 +307,22 @@ export async function loadCoreWorkspaceData(userId: string) {
     children: childrenBySpace.get(space.id),
   }))
 
+  const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => ({
+    id: event.id,
+    actor: profilesById.get(event.actor_id) ?? 'Workspace member',
+    action: event.action,
+    target: (event.details as { target?: string } | null)?.target ?? event.target_id,
+    date: relativeDate(event.created_at),
+    type: (event.target_type === 'Content' || event.target_type === 'Access' ? event.target_type : 'Workspace') as AuditEvent['type'],
+  }))
+
   return {
     data: {
       currentUserName: profilesById.get(userId) ?? 'Workspace member',
       articles,
       spaces,
       bookmarks: (bookmarksResult.data ?? []).map((bookmark) => bookmark.article_id),
+      events,
     },
     error: null,
   }
