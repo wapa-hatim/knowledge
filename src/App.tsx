@@ -11,6 +11,7 @@ import { KnowledgeAssetDialog } from './features/knowledge/KnowledgeAssetDialog'
 import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialog'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
+import { parseViewCount } from './utils/articleMetrics'
 import HelpCenter from './features/help/HelpCenter'
 import { createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
@@ -84,6 +85,7 @@ function App() {
   const [adminDataLoading, setAdminDataLoading] = useState(false)
   const [adminDataError, setAdminDataError] = useState<string | null>(null)
   const [workspaceDataLoading, setWorkspaceDataLoading] = useState(false)
+  const [coreDataLoaded, setCoreDataLoaded] = useState(false)
   const [workspaceDataError, setWorkspaceDataError] = useState<string | null>(null)
   const [questionsLoading, setQuestionsLoading] = useState(false)
   const [hubDataLoading, setHubDataLoading] = useState(false)
@@ -130,6 +132,7 @@ function App() {
       setAdminDataError(null)
       setWorkspaceDataError(null)
       setWorkspaceDataLoading(false)
+      setCoreDataLoaded(false)
       setAdminDataLoading(false)
       loadedSectionsRef.current.clear()
       pendingSectionsRef.current.clear()
@@ -164,6 +167,7 @@ function App() {
       setCurrentUserName(userName ?? '')
       setIsLoggedOut(false)
       setIsAuthLoading(false)
+      setCoreDataLoaded(false)
       setWorkspaceDataLoading(true)
       const { data: workspaceData, error: workspaceError } = await loadCoreWorkspaceData(userId)
       if (!active || activeUserIdRef.current !== userId) return
@@ -178,11 +182,11 @@ function App() {
       setTaxonomyTerms([])
       setZeroResultQueries([])
       setUsers([])
-      setAuditEvents([])
       setAdminSpaces([])
       setCreateSpace(workspaceData?.spaces[0]?.name ?? '')
       setWorkspaceDataError(workspaceError)
       setWorkspaceDataLoading(false)
+      setCoreDataLoaded(true)
     }
 
     void supabase.auth.getSession().then(({ data }) => {
@@ -246,19 +250,25 @@ function App() {
   }, [effectiveView, authUserId, role])
 
   useEffect(() => {
-    if (!authUserId || (effectiveView !== 'people' && effectiveView !== 'audit') || loadedSectionsRef.current.has('admin') || pendingSectionsRef.current.has('admin')) return
+    if (!authUserId || (effectiveView !== 'people' && effectiveView !== 'audit')) return
     if (role !== 'Super Admin') return
-    pendingSectionsRef.current.add('admin')
+    const adminMode = effectiveView === 'audit' ? 'audit' : 'people'
+    const sectionKey = `admin:${adminMode}`
+    if (loadedSectionsRef.current.has(sectionKey) || pendingSectionsRef.current.has(sectionKey)) return
+    pendingSectionsRef.current.add(sectionKey)
     setAdminDataLoading(true)
-    void loadWorkspaceAdminData().then(({ data, error }) => {
+    void loadWorkspaceAdminData(adminMode).then(({ data, error }) => {
       if (activeUserIdRef.current !== authUserId) return
-      setUsers(data?.users ?? [])
-      setAuditEvents(data?.events ?? [])
-      setAdminSpaces(data?.spaces ?? [])
+      if (adminMode === 'people') {
+        setUsers(data?.users ?? [])
+        setAdminSpaces(data?.spaces ?? [])
+      } else {
+        setAuditEvents(data?.events ?? [])
+      }
       setAdminDataError(error)
-      if (!error) loadedSectionsRef.current.add('admin')
+      if (!error) loadedSectionsRef.current.add(sectionKey)
     }).finally(() => {
-      pendingSectionsRef.current.delete('admin')
+      pendingSectionsRef.current.delete(sectionKey)
       if (activeUserIdRef.current === authUserId) setAdminDataLoading(false)
     })
   }, [effectiveView, authUserId, role])
@@ -478,7 +488,7 @@ function App() {
     const { error } = await manageWorkspaceUser('update', { member: user })
     if (error) return error
     setUsers((current) => current.map((existing) => existing.id === user.id ? user : existing))
-    loadedSectionsRef.current.delete('admin')
+    loadedSectionsRef.current.delete('admin:people')
     return null
   }
   const inviteUser = async (user: Omit<WorkspaceUser, 'id'>) => {
@@ -486,21 +496,21 @@ function App() {
     if (error) return error
     const member = (result as { member?: WorkspaceUser } | null)?.member
     if (member) setUsers((current) => [member, ...current])
-    loadedSectionsRef.current.delete('admin')
+    loadedSectionsRef.current.delete('admin:people')
     return null
   }
   const setUserStatus = async (userId: string, status: WorkspaceUser['status']) => {
     const { error } = await manageWorkspaceUser('status', { userId, status })
     if (error) return error
     setUsers((current) => current.map((user) => user.id === userId ? { ...user, status } : user))
-    loadedSectionsRef.current.delete('admin')
+    loadedSectionsRef.current.delete('admin:people')
     return null
   }
   const deleteUser = async (userId: string) => {
     const { error } = await manageWorkspaceUser('delete', { userId })
     if (error) return error
     setUsers((current) => current.filter((user) => user.id !== userId))
-    loadedSectionsRef.current.delete('admin')
+    loadedSectionsRef.current.delete('admin:people')
     return null
   }
   const openCreateForSpace = (spaceName: string) => {
@@ -594,7 +604,7 @@ function App() {
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
-    <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} userName={currentUserName} spaces={spaces} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
+    <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
       <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
         const { error } = await signOut()
@@ -636,16 +646,12 @@ function AnalyticsView({ articles, zeroResultQueries, loading }: { articles: Art
     count: articles.filter((article) => article.status === status).length,
   }))
   const maxStatusCount = Math.max(1, ...statuses.map((status) => status.count))
-  const totalViews = articles.reduce((total, article) => {
-    const rawViews = article.views.toLowerCase().replaceAll(',', '')
-    const value = Number.parseFloat(rawViews)
-    return total + (Number.isNaN(value) ? 0 : rawViews.endsWith('k') ? value * 1000 : value)
-  }, 0)
+  const totalViews = articles.reduce((total, article) => total + parseViewCount(article.views), 0)
   return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><button className="date-filter" type="button">Last 30 days <span>⌄</span></button></div>
     <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
     <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
       <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? 'Loading…' : `${zeroResultQueries.length} total`}</span></div>{loading ? <div className="empty-state">Loading search activity…</div> : zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{!loading && zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
-    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => Number.parseFloat(second.views) - Number.parseFloat(first.views)).slice(0, 4)} role="Super Admin" title="" description="" compact />
+    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role="Super Admin" title="" description="" compact />
   </section>
 }
 

@@ -8,7 +8,7 @@ const navigation: { label: string; view: View; icon: LucideIcon; roles?: Role[];
   { label: 'Overview', view: 'overview', icon: LayoutDashboard },
   { label: 'Knowledge library', view: 'library', icon: FileStack },
   { label: 'Formats & models', view: 'models', icon: BookOpenText, roles: ['Super Admin', 'Space Admin', 'Author'] },
-  { label: 'Review queue', view: 'reviews', icon: ShieldCheck, roles: ['Super Admin', 'Space Admin', 'Reviewer'], count: '8' },
+  { label: 'Review queue', view: 'reviews', icon: ShieldCheck, roles: ['Super Admin', 'Space Admin', 'Reviewer'] },
   { label: 'Questions & answers', view: 'questions', icon: MessageSquareText }, { label: 'Explore spaces', view: 'spaces', icon: PanelsTopLeft },
   { label: 'Help center', view: 'help', icon: CircleHelp },
   { label: 'Analytics', view: 'analytics', icon: ChartNoAxesCombined, roles: ['Super Admin', 'Space Admin'] },
@@ -24,13 +24,14 @@ interface SidebarProps {
   role: Role
   userName: string
   spaces: KnowledgeSpace[]
+  reviewCount: number
   selectedSpaceName: string | null
   onSelectSpace: (name: string | null) => void
   onOpenSpace: (name: string) => void
   onCreateSpace: () => void
 }
 
-export function Sidebar({ activeView, onNavigate, role, userName, spaces, selectedSpaceName, onSelectSpace, onOpenSpace, onCreateSpace }: SidebarProps) {
+export function Sidebar({ activeView, onNavigate, role, userName, spaces, reviewCount, selectedSpaceName, onSelectSpace, onOpenSpace, onCreateSpace }: SidebarProps) {
   const [spacesExpanded, setSpacesExpanded] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const selectedSpace = spaces.find((space) => space.name === selectedSpaceName)
@@ -55,7 +56,7 @@ export function Sidebar({ activeView, onNavigate, role, userName, spaces, select
         {role === 'Super Admin' && <button type="button" className="workspace-option create-option" onClick={() => { onCreateSpace(); setWorkspaceMenuOpen(false) }}><span className="workspace-option-label">Create space</span><span className="workspace-option-plus">+</span></button>}
       </div>
     </details>
-    <div className="sidebar-label">WORKSPACE</div><nav className="sidebar-nav" aria-label="Workspace navigation">{navigation.filter((item) => !item.roles || item.roles.includes(role)).map((item) => { const Icon = item.icon; return <button className={`nav-link${activeView === item.view ? ' active' : ''}`} key={item.view} onClick={() => onNavigate(item.view)} type="button" aria-current={activeView === item.view ? 'page' : undefined}><Icon size={17} /><span>{item.label}</span>{item.count && <span className="nav-count">{item.count}</span>}</button> })}</nav>
+    <div className="sidebar-label">WORKSPACE</div><nav className="sidebar-nav" aria-label="Workspace navigation">{navigation.filter((item) => !item.roles || item.roles.includes(role)).map((item) => { const Icon = item.icon; const count = item.view === 'reviews' ? reviewCount : item.count; return <button className={`nav-link${activeView === item.view ? ' active' : ''}`} key={item.view} onClick={() => onNavigate(item.view)} type="button" aria-current={activeView === item.view ? 'page' : undefined}><Icon size={17} /><span>{item.label}</span>{count ? <span className="nav-count">{count}</span> : null}</button> })}</nav>
     {administration.some((item) => item.roles.includes(role)) && <><div className="sidebar-label administration-label">ADMINISTRATION</div><nav className="sidebar-nav" aria-label="Administration">{administration.filter((item) => item.roles.includes(role)).map((item) => { const Icon = item.icon; return <button className={`nav-link${activeView === item.view ? ' active' : ''}`} key={item.view} onClick={() => onNavigate(item.view)} type="button" aria-current={activeView === item.view ? 'page' : undefined}><Icon size={17} /><span>{item.label}</span></button> })}</nav></>}
     <div className={`sidebar-spaces${spacesExpanded ? ' expanded' : ''}`}>
       <div className="sidebar-space-header">
