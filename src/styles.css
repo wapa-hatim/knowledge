@@ -73,6 +73,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .signed-out-screen { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: linear-gradient(180deg, #edf5f0 0%, #f7faf8 100%); }
 .signed-out-panel { display: grid; width: min(420px, 100%); gap: 14px; padding: 34px 28px 28px; border: 1px solid #e5ece7; border-radius: 18px; background: rgba(255,255,255,.96); box-shadow: 0 18px 52px rgba(20,43,33,.08); }
 .signed-out-panel .brand-mark { margin: 0 auto 4px; }
+.signed-out-panel > .brand-mark { width: 52px; height: 52px; border-radius: 14px; }
+.signed-out-panel > .brand-mark svg { width: 29px; height: 29px; }
 .signed-out-panel .eyebrow { justify-content: center; margin-bottom: 2px; }
 .signed-out-panel h1 { color: #244236; text-align: center; font: 700 28px/1.2 var(--heading-font); }
 .signed-out-panel p { color: #73837c; font-size: 11px; line-height: 1.6; }
