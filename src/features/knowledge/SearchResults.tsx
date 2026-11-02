@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowDownWideNarrow, ArrowRight, FileText, Search, SlidersHorizontal } from 'lucide-react'
 import type { Article } from '../../types'
+import { parseViewCount } from '../../utils/articleMetrics'
 import './knowledge.css'
 
 interface SearchResultsProps { articles: Article[]; query: string; onQueryChange: (value: string) => void; onOpenArticle: (article: Article) => void; onSaveZeroResult: (query: string) => void }
@@ -21,7 +22,7 @@ export function SearchResults({ articles, query, onQueryChange, onOpenArticle, o
       const text = [article.title, article.summary, article.body, article.space, article.category, article.owner, ...article.tags].join(' ').toLowerCase()
       return (!normalized || text.includes(normalized)) && (space === 'All spaces' || article.space === space) && (category === 'All categories' || article.category === category) && (author === 'All authors' || article.owner === author)
     })
-    return matches.sort((left, right) => sort === 'recent' ? left.updated.localeCompare(right.updated) : sort === 'popular' ? Number.parseFloat(right.views) - Number.parseFloat(left.views) : 0)
+    return matches.sort((left, right) => sort === 'recent' ? articles.indexOf(left) - articles.indexOf(right) : sort === 'popular' ? parseViewCount(right.views) - parseViewCount(left.views) : 0)
   }, [articles, author, category, query, sort, space])
 
   return <section className="page-section search-page"><div className="page-heading"><div><div className="eyebrow">SEARCH YOUR WORKSPACE</div><h1>Find the answer, not another rabbit hole.</h1><p>Search titles, content, tags, owners, and spaces.</p></div></div>

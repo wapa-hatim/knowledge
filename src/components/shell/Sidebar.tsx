@@ -67,6 +67,6 @@ export function Sidebar({ activeView, onNavigate, role, userName, spaces, review
       </div>
       {spacesExpanded && <div className="sidebar-spaces-list" id="sidebar-space-list">{spaces.map((space) => <button className="space-link" type="button" key={space.name} onClick={() => onOpenSpace(space.name)}><i className={`space-dot dot-${space.color}`} /><span className="sidebar-space-name">{space.name}</span><span>{space.articleCount}</span></button>)}{spaces.length === 0 && <span className="spaces-empty">No spaces yet</span>}</div>}
     </div>
-    <div className="sidebar-bottom"><button className="help-link" type="button" onClick={() => onNavigate('help')}><CircleHelp size={17} />Help center <span>↗</span></button><div className="sidebar-profile"><div className="profile-avatar">{userName.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'}</div><div><strong>{userName || 'Account'}</strong><small>{role}</small></div><button type="button" aria-label="Account menu">···</button></div></div>
+    <div className="sidebar-bottom"><button className="help-link" type="button" onClick={() => onNavigate('help')}><CircleHelp size={17} />Help center <span>↗</span></button><div className="sidebar-profile"><div className="profile-avatar">{userName.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'}</div><div><strong>{userName || 'Account'}</strong><small>{role}</small></div></div></div>
   </aside>
 }

@@ -103,6 +103,7 @@ function App() {
   const loadedSectionsRef = useRef(new Set<string>())
   const pendingSectionsRef = useRef(new Set<string>())
   const articleDetailRequestRef = useRef(0)
+  const isMountedRef = useRef(false)
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
   const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? spaces[0]?.name ?? ''
   const visibleArticles = useMemo(() => {
@@ -113,7 +114,7 @@ function App() {
 
   useEffect(() => {
     if (!supabase) return
-    let active = true
+    isMountedRef.current = true
     const clearWorkspace = () => {
       setAuthUserId(null)
       setCurrentUserName('')
@@ -131,14 +132,20 @@ function App() {
       setAdminSpaces([])
       setAdminDataError(null)
       setWorkspaceDataError(null)
+      setSettings(defaultSettings)
       setWorkspaceDataLoading(false)
       setCoreDataLoaded(false)
       setAdminDataLoading(false)
+      setQuestionsLoading(false)
+      setHubDataLoading(false)
+      setSettingsLoading(false)
+      setSearchGapsLoading(false)
+      setArticleDetailsLoading(false)
       loadedSectionsRef.current.clear()
       pendingSectionsRef.current.clear()
     }
     const syncSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'], forceLogin: boolean) => {
-      if (!active) return
+      if (!isMountedRef.current) return
       if (!session || forceLogin) {
         activeUserIdRef.current = null
         clearWorkspace()
@@ -149,9 +156,10 @@ function App() {
       }
 
       if (activeUserIdRef.current === session.user.id) return
+      if (activeUserIdRef.current && activeUserIdRef.current !== session.user.id) clearWorkspace()
       activeUserIdRef.current = session.user.id
       const { role: profileRole, userId, userName, error } = await getCurrentWorkspaceRole()
-      if (!active || activeUserIdRef.current !== session.user.id) return
+      if (!isMountedRef.current || activeUserIdRef.current !== session.user.id) return
       if (error || !profileRole || !userId) {
         activeUserIdRef.current = null
         clearWorkspace()
@@ -170,7 +178,7 @@ function App() {
       setCoreDataLoaded(false)
       setWorkspaceDataLoading(true)
       const { data: workspaceData, error: workspaceError } = await loadCoreWorkspaceData(userId)
-      if (!active || activeUserIdRef.current !== userId) return
+      if (!isMountedRef.current || activeUserIdRef.current !== userId) return
       setArticles(workspaceData?.articles ?? [])
       setSpaces(workspaceData?.spaces ?? [])
       setBookmarks(workspaceData?.bookmarks ?? [])
@@ -193,7 +201,7 @@ function App() {
       const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
       return syncSession(data.session, forceLogin)
     }).catch(() => {
-      if (!active) return
+      if (!isMountedRef.current) return
       setIsLoggedOut(true)
       setWorkspaceDataError('Unable to load your Supabase session.')
       setIsAuthLoading(false)
@@ -207,7 +215,7 @@ function App() {
     })
 
     return () => {
-      active = false
+      isMountedRef.current = false
       subscription.unsubscribe()
     }
   }, [])
@@ -416,61 +424,70 @@ function App() {
   }
   const updateArticle = (id: string, update: (article: Article) => Article) => setArticles((current) => current.map((article) => article.id === id ? update(article) : article))
   const autosaveArticle = async (body: string) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const updatedArticle = { ...selectedArticle, body, updated: 'Just now' }
     const { error } = await saveArticleRecord(updatedArticle)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return false
     }
     updateArticle(selectedArticle.id, () => updatedArticle)
+    return true
   }
   const saveArticleVersion = async (body: string) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const { error } = await saveArticleVersionRecord(selectedArticle, body)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return false
     }
     const version: ArticleVersion = { id: crypto.randomUUID(), title: selectedArticle.title, body, status: selectedArticle.status, author: selectedArticle.owner, savedAt: formatTimestamp() }
     updateArticle(selectedArticle.id, (article) => ({ ...article, body, versions: [version, ...(article.versions ?? [])] }))
     addEvent('Atlas Admin', 'Saved version', selectedArticle.title, 'Content')
+    return true
   }
   const changeArticleStatus = async (status: ArticleStatus) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const updatedArticle = { ...selectedArticle, status, updated: 'Just now' }
     const { error } = await saveArticleRecord(updatedArticle)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return false
     }
     updateArticle(selectedArticle.id, () => updatedArticle)
     addEvent('Atlas Admin', `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
+    return true
   }
   const addArticleComment = async (comment: ArticleComment) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const { error } = await saveArticleComment(selectedArticle.id, comment.body)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return false
     }
     updateArticle(selectedArticle.id, (article) => ({ ...article, comments: [...(article.comments ?? []), comment] }))
+    return true
   }
   const addArticleFeedback = async (helpful: boolean, feedback: string) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const { error } = await saveArticleFeedback(selectedArticle.id, helpful, feedback)
-    if (error) setWorkspaceDataError(error)
+    if (error) {
+      setWorkspaceDataError(error)
+      return false
+    }
+    return true
   }
   const restoreArticleVersion = async (version: ArticleVersion) => {
-    if (!selectedArticle) return
+    if (!selectedArticle) return false
     const updatedArticle = { ...selectedArticle, body: version.body, status: version.status, updated: 'Just now' }
     const { error } = await saveArticleRecord(updatedArticle)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return false
     }
     updateArticle(selectedArticle.id, () => updatedArticle)
     addEvent('Atlas Admin', 'Restored version', selectedArticle.title, 'Content')
+    return true
   }
   const removeArticle = async () => {
     if (!selectedArticle) return
@@ -620,16 +637,16 @@ function App() {
       }} />
       <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status"><LoaderCircle className="auth-loading-spinner" size={18} /> Loading workspace data…</div> : <Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubDataLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
-        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
+        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && articleDetailsLoading && <div className="page-loading" role="status">Loading article…</div>}
         {effectiveView === 'article' && selectedArticle && !articleDetailsLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
         {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
-        {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} loading={searchGapsLoading} />}
+        {effectiveView === 'analytics' && <AnalyticsView articles={articles} currentUserName={currentUserName} zeroResultQueries={zeroResultQueries} loading={searchGapsLoading} />}
         {effectiveView === 'people' && (adminPageLoading ? <div className="page-loading" role="status">Loading workspace members…</div> : <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
         {effectiveView === 'settings' && (settingsLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
         {effectiveView === 'audit' && (adminPageLoading ? <div className="page-loading" role="status">Loading audit events…</div> : <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
@@ -642,18 +659,18 @@ function App() {
   </div>
 }
 
-function AnalyticsView({ articles, zeroResultQueries, loading }: { articles: Article[]; zeroResultQueries: string[]; loading: boolean }) {
+function AnalyticsView({ articles, currentUserName, zeroResultQueries, loading }: { articles: Article[]; currentUserName: string; zeroResultQueries: string[]; loading: boolean }) {
   const statuses = ['Published', 'Under review', 'Draft', 'Archived'].map((status) => ({
     label: status,
     count: articles.filter((article) => article.status === status).length,
   }))
   const maxStatusCount = Math.max(1, ...statuses.map((status) => status.count))
   const totalViews = articles.reduce((total, article) => total + parseViewCount(article.views), 0)
-  return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><button className="date-filter" type="button">Last 30 days <span>⌄</span></button></div>
+  return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><span className="date-filter">All recorded data</span></div>
     <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
     <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
       <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? 'Loading…' : `${zeroResultQueries.length} total`}</span></div>{loading ? <div className="empty-state">Loading search activity…</div> : zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{!loading && zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
-    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role="Super Admin" title="" description="" compact />
+    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role="Super Admin" currentUserName={currentUserName} title="" description="" compact />
   </section>
 }
 
