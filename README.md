@@ -1,5 +1,40 @@
 # React + TypeScript + Vite
 
+## Supabase setup
+
+1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SUPABASE_BUCKET` using the project URL and publishable/anon key. Never put a Supabase secret/service-role key in a `VITE_` variable.
+2. Create the first auth user in Supabase Dashboard under **Authentication → Users**.
+3. Apply the schema and private Storage bucket policies:
+
+  ```sh
+  npm run supabase:login
+  npm run supabase:link
+  npm run db:push
+  ```
+
+  Linking prompts for the database password. The migration creates profiles, spaces and memberships, articles and versions, comments, feedback, bookmarks, assets, Q&A, taxonomy, integrations, audit/search records, workspace settings, and vector-ready knowledge chunks. It also creates a private `knowledge-assets` bucket with space-membership policies.
+4. Promote the initial admin profile in the Supabase SQL Editor after the migration:
+
+  ```sql
+  update public.profiles
+  set role = 'Super Admin'
+  where email = 'admin@atlas.com';
+  ```
+
+5. Add the same URL and publishable/anon key to Vercel Environment Variables as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, set `VITE_SUPABASE_BUCKET=knowledge-assets`, then redeploy.
+
+The role is read from `public.profiles`. Create the auth user before applying the migration or afterward; the migration backfills existing users, and the auth trigger creates profiles for future users. Do not expose the database password or Supabase secret/service-role key to the browser.
+
+The file upload dialog now uploads objects to private Supabase Storage and inserts asset metadata. Other workspace screens still use browser-local state until their data operations are migrated to Supabase.
+
+## Local commands
+
+```sh
+npm run dev
+npm run build
+npm run lint
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

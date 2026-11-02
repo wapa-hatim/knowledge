@@ -57,6 +57,9 @@ create table public.articles (
   visibility text not null default 'members' check (visibility in ('members', 'workspace')),
   tags text[] not null default '{}',
   view_count bigint not null default 0 check (view_count >= 0),
+  search_document tsvector generated always as (
+    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(body, '') || ' ' || array_to_string(tags, ' '))
+  ) stored,
   review_due_at timestamptz,
   published_at timestamptz,
   created_at timestamptz not null default now(),
@@ -110,8 +113,11 @@ create table public.knowledge_assets (
   mime_type text not null,
   byte_size bigint not null check (byte_size >= 0),
   extracted_text text not null default '',
-  status text not null default 'Processing' check (status in ('Indexed', 'Processing', 'Synced', 'Failed')),
   tags text[] not null default '{}',
+  search_document tsvector generated always as (
+    to_tsvector('english', coalesce(name, '') || ' ' || coalesce(extracted_text, '') || ' ' || array_to_string(tags, ' '))
+  ) stored,
+  status text not null default 'Processing' check (status in ('Indexed', 'Processing', 'Synced', 'Failed')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -245,7 +251,9 @@ create table public.knowledge_chunks (
 
 create index articles_space_status_updated_idx on public.articles (space_id, status, updated_at desc);
 create index articles_tags_idx on public.articles using gin (tags);
+create index articles_search_document_idx on public.articles using gin (search_document);
 create index knowledge_assets_space_created_idx on public.knowledge_assets (space_id, created_at desc);
+create index knowledge_assets_search_document_idx on public.knowledge_assets using gin (search_document);
 create index questions_space_created_idx on public.knowledge_questions (space_id, created_at desc);
 create index audit_events_created_idx on public.audit_events (created_at desc);
 create index search_queries_created_idx on public.search_queries (created_at desc);
@@ -392,6 +400,7 @@ alter table public.knowledge_chunks enable row level security;
 
 create policy profiles_select on public.profiles for select to authenticated using (id = auth.uid() or public.is_workspace_admin());
 create policy profiles_update on public.profiles for update to authenticated using (id = auth.uid() or public.is_workspace_admin()) with check (id = auth.uid() or public.is_workspace_admin());
+revoke update on public.profiles from anon, authenticated;
 grant update (display_name, department) on public.profiles to authenticated;
 
 create policy spaces_select on public.spaces for select to authenticated using (public.is_space_member(id));
@@ -408,36 +417,50 @@ create policy categories_manage on public.categories for all to authenticated us
 create policy articles_select on public.articles for select to authenticated using (public.is_space_member(space_id));
 create policy articles_insert on public.articles for insert to authenticated with check (public.is_space_member(space_id) and author_id = auth.uid());
 create policy articles_update on public.articles for update to authenticated using (public.can_manage_space(space_id) or (owner_id = auth.uid() and public.is_space_member(space_id))) with check (public.can_manage_space(space_id) or (owner_id = auth.uid() and public.is_space_member(space_id)));
-create policy articles_delete on public.articles for delete to authenticated using (public.can_manage_space(space_id) or author_id = auth.uid());
+create policy articles_delete on public.articles for delete to authenticated using (public.is_space_member(space_id) and (public.can_manage_space(space_id) or author_id = auth.uid()));
 
 create policy article_versions_select on public.article_versions for select to authenticated using (exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
-create policy article_versions_insert on public.article_versions for insert to authenticated with check (author_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
+create policy article_versions_insert on public.article_versions for insert to authenticated with check (author_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id) and (public.can_manage_space(a.space_id) or a.owner_id = auth.uid() or a.author_id = auth.uid())));
 
 create policy article_comments_select on public.article_comments for select to authenticated using (exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
 create policy article_comments_insert on public.article_comments for insert to authenticated with check (author_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
-create policy article_comments_update_own on public.article_comments for update to authenticated using (author_id = auth.uid()) with check (author_id = auth.uid());
+create policy article_comments_update_own on public.article_comments for update to authenticated using (author_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id))) with check (author_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
 create policy article_comments_delete_own on public.article_comments for delete to authenticated using (author_id = auth.uid() or public.is_workspace_admin());
 
-create policy article_feedback_self on public.article_feedback for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy bookmarks_self on public.bookmarks for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy article_feedback_self on public.article_feedback for all to authenticated using (user_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id))) with check (user_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
+create policy bookmarks_self on public.bookmarks for all to authenticated using (user_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id))) with check (user_id = auth.uid() and exists (select 1 from public.articles a where a.id = article_id and public.is_space_member(a.space_id)));
 
 create policy knowledge_assets_select on public.knowledge_assets for select to authenticated using (public.is_space_member(space_id));
 create policy knowledge_assets_insert on public.knowledge_assets for insert to authenticated with check (uploaded_by = auth.uid() and public.is_space_member(space_id));
-create policy knowledge_assets_update on public.knowledge_assets for update to authenticated using (public.can_manage_space(space_id) or uploaded_by = auth.uid()) with check (public.can_manage_space(space_id) or uploaded_by = auth.uid());
-create policy knowledge_assets_delete on public.knowledge_assets for delete to authenticated using (public.can_manage_space(space_id) or uploaded_by = auth.uid());
+create policy knowledge_assets_update on public.knowledge_assets for update to authenticated using (public.is_space_member(space_id) and (public.can_manage_space(space_id) or uploaded_by = auth.uid())) with check (public.is_space_member(space_id) and (public.can_manage_space(space_id) or uploaded_by = auth.uid()));
+create policy knowledge_assets_delete on public.knowledge_assets for delete to authenticated using (public.is_space_member(space_id) and (public.can_manage_space(space_id) or uploaded_by = auth.uid()));
 
 create policy questions_select on public.knowledge_questions for select to authenticated using (public.is_space_member(space_id));
 create policy questions_insert on public.knowledge_questions for insert to authenticated with check (author_id = auth.uid() and public.is_space_member(space_id));
-create policy questions_update on public.knowledge_questions for update to authenticated using (author_id = auth.uid() or public.can_manage_space(space_id)) with check (author_id = auth.uid() or public.can_manage_space(space_id));
-create policy questions_delete on public.knowledge_questions for delete to authenticated using (author_id = auth.uid() or public.can_manage_space(space_id));
+create policy questions_update on public.knowledge_questions for update to authenticated using (public.is_space_member(space_id) and (author_id = auth.uid() or public.can_manage_space(space_id))) with check (public.is_space_member(space_id) and (author_id = auth.uid() or public.can_manage_space(space_id)));
+create policy questions_delete on public.knowledge_questions for delete to authenticated using (public.is_space_member(space_id) and (author_id = auth.uid() or public.can_manage_space(space_id)));
 
 create policy answers_select on public.question_answers for select to authenticated using (exists (select 1 from public.knowledge_questions q where q.id = question_id and public.is_space_member(q.space_id)));
 create policy answers_insert on public.question_answers for insert to authenticated with check (author_id = auth.uid() and exists (select 1 from public.knowledge_questions q where q.id = question_id and public.is_space_member(q.space_id)));
-create policy answers_update on public.question_answers for update to authenticated using (author_id = auth.uid() or public.current_workspace_role() in ('Super Admin', 'Reviewer', 'Space Admin')) with check (author_id = auth.uid() or public.current_workspace_role() in ('Super Admin', 'Reviewer', 'Space Admin'));
-create policy answers_delete on public.question_answers for delete to authenticated using (author_id = auth.uid() or public.is_workspace_admin());
+create policy answers_update on public.question_answers for update to authenticated using (
+  exists (
+    select 1 from public.knowledge_questions q
+    where q.id = question_id
+      and public.is_space_member(q.space_id)
+      and (author_id = auth.uid() or public.can_manage_space(q.space_id) or public.current_workspace_role() = 'Reviewer')
+  )
+) with check (
+  exists (
+    select 1 from public.knowledge_questions q
+    where q.id = question_id
+      and public.is_space_member(q.space_id)
+      and (author_id = auth.uid() or public.can_manage_space(q.space_id) or public.current_workspace_role() = 'Reviewer')
+  )
+);
+create policy answers_delete on public.question_answers for delete to authenticated using (author_id = auth.uid() or (public.is_workspace_admin() and exists (select 1 from public.knowledge_questions q where q.id = question_id and public.is_space_member(q.space_id))));
 
-create policy question_votes_self on public.question_votes for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy answer_votes_self on public.answer_votes for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy question_votes_self on public.question_votes for all to authenticated using (user_id = auth.uid() and exists (select 1 from public.knowledge_questions q where q.id = question_id and public.is_space_member(q.space_id))) with check (user_id = auth.uid() and exists (select 1 from public.knowledge_questions q where q.id = question_id and public.is_space_member(q.space_id)));
+create policy answer_votes_self on public.answer_votes for all to authenticated using (user_id = auth.uid() and exists (select 1 from public.question_answers a join public.knowledge_questions q on q.id = a.question_id where a.id = answer_id and public.is_space_member(q.space_id))) with check (user_id = auth.uid() and exists (select 1 from public.question_answers a join public.knowledge_questions q on q.id = a.question_id where a.id = answer_id and public.is_space_member(q.space_id)));
 
 create policy taxonomy_terms_select on public.taxonomy_terms for select to authenticated using (true);
 create policy taxonomy_terms_manage on public.taxonomy_terms for all to authenticated using (public.current_workspace_role() in ('Super Admin', 'Space Admin')) with check (public.current_workspace_role() in ('Super Admin', 'Space Admin'));
@@ -458,7 +481,7 @@ create policy workspace_settings_select on public.workspace_settings for select 
 create policy workspace_settings_manage on public.workspace_settings for all to authenticated using (public.is_workspace_admin()) with check (public.is_workspace_admin());
 
 create policy knowledge_chunks_select on public.knowledge_chunks for select to authenticated using (public.is_space_member(space_id));
-create policy knowledge_chunks_manage on public.knowledge_chunks for all to authenticated using (public.current_workspace_role() in ('Super Admin', 'Space Admin', 'Author')) with check (public.current_workspace_role() in ('Super Admin', 'Space Admin', 'Author'));
+create policy knowledge_chunks_manage on public.knowledge_chunks for all to authenticated using (public.is_space_member(space_id) and (public.can_manage_space(space_id) or public.current_workspace_role() = 'Author')) with check (public.is_space_member(space_id) and (public.can_manage_space(space_id) or public.current_workspace_role() = 'Author'));
 
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('knowledge-assets', 'knowledge-assets', false, 104857600)
