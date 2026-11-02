@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { BookOpenText, Eye, EyeOff, LoaderCircle } from 'lucide-react'
+import { AlertCircle, BookOpenText, Eye, EyeOff, FileText, LoaderCircle } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
@@ -416,27 +416,31 @@ function App() {
     const { error } = await saveSpaceRecord(previousName, space)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return error
     }
     setSpaces((current) => previousName
       ? current.map((existing) => existing.name === previousName ? space : existing)
       : [...current, space])
     if (selectedSpaceName === previousName) setSelectedSpaceName(space.name)
     addEvent(currentUserName, previousName ? 'Updated space' : 'Created space', space.name, 'Workspace')
+    return null
   }
   const removeSpaceItem = async (spaceName: string) => {
     const { error } = await deleteSpaceRecord(spaceName)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return error
     }
     setSpaces((current) => current.filter((space) => space.name !== spaceName))
     setArticles((current) => current.filter((article) => article.space !== spaceName))
+    setQuestions((current) => current.filter((question) => question.space !== spaceName))
+    setKnowledgeAssets((current) => current.filter((asset) => asset.space !== spaceName))
     if (selectedSpaceName === spaceName) {
       setSelectedSpaceName(null)
       setActiveView('spaces')
     }
     addEvent(currentUserName, 'Deleted space', spaceName, 'Workspace')
+    return null
   }
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

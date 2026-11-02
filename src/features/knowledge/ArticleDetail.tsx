@@ -7,8 +7,6 @@ import type { Article, ArticleComment, ArticleStatus, ArticleVersion, Role } fro
 import { ArticleEditor } from './ArticleEditor'
 import './knowledge.css'
 
-const createCommentId = () => `C-${Date.now()}`
-
 interface ArticleDetailProps {
   article: Article
   role: Role

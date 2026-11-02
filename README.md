@@ -4,7 +4,7 @@
 
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SUPABASE_BUCKET` using the project URL and publishable/anon key. Never put a Supabase secret/service-role key in a `VITE_` variable.
 2. Create the first auth user in Supabase Dashboard under **Authentication → Users**.
-3. Apply the schema and private Storage bucket policies:
+3. Apply the schema, workspace-user status, vote-count RPC, and private Storage bucket policies:
 
   ```sh
   npm run supabase:login
@@ -12,7 +12,7 @@
   npm run db:push
   ```
 
-  Linking prompts for the database password. The migration creates profiles, spaces and memberships, articles and versions, comments, feedback, bookmarks, assets, Q&A, taxonomy, integrations, audit/search records, workspace settings, and vector-ready knowledge chunks. It also creates a private `knowledge-assets` bucket with space-membership policies.
+  Linking prompts for the database password. The migrations create profiles, spaces and memberships, articles and versions, comments, feedback, bookmarks, assets, Q&A, taxonomy, integrations, audit/search records, workspace settings, and vector-ready knowledge chunks. They also create a private `knowledge-assets` bucket with space-membership policies.
 4. Promote the initial admin profile in the Supabase SQL Editor after the migration:
 
   ```sql
@@ -23,7 +23,15 @@
 
 5. Add the same URL and publishable/anon key to Vercel Environment Variables as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, set `VITE_SUPABASE_BUCKET=knowledge-assets`, then redeploy.
 
-The role is read from `public.profiles`. Create the auth user before applying the migration or afterward; the migration backfills existing users, and the auth trigger creates profiles for future users. Do not expose the database password or Supabase secret/service-role key to the browser.
+6. Deploy the server-side user-management function:
+
+  ```sh
+  supabase functions deploy manage-workspace-user
+  ```
+
+  The function validates the caller’s Supabase session and Super Admin profile before inviting, updating, suspending/reactivating, or deleting a member. Its service-role key stays in the Edge Function environment and is never sent to the browser. Configure Supabase Auth email delivery and the allowed redirect URL for invitation emails.
+
+The role is read from `public.profiles`. Create the first auth user before applying the migration or afterward; the migration backfills existing users, and the auth trigger creates profiles for future users. People, articles, spaces, Q&A, models, bookmarks, taxonomy, integrations, settings, and search gaps load from Supabase; the app no longer falls back to local demo records. Do not expose the database password or Supabase secret/service-role key to the browser.
 
 ### Seed development accounts
 
@@ -35,7 +43,7 @@ npm run seed:users
 
 The script creates or updates `admin@atlas.com` as Super Admin, plus Space Admin, Author, Reviewer, and Viewer accounts with corresponding space memberships. It never prints passwords. Rerunning it resets each seeded account to the password currently in `.env.seed.local`.
 
-The file upload dialog now uploads objects to private Supabase Storage and inserts asset metadata. Other workspace screens still use browser-local state until their data operations are migrated to Supabase.
+The optional seed script is for development environments only. Seeded accounts and sample workspace data must not be used as production content.
 
 ## Local commands
 

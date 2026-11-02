@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, BookOpen, Clock3, FileText, Plus, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, BookOpen, Clock3, FileText, Plus, Sparkles, Users } from 'lucide-react'
 import * as Tabs from '@radix-ui/react-tabs'
 import type { Article, AuditEvent, Role, View } from '../../types'
 import { Button } from '../../components/ui/Button'

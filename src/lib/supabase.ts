@@ -137,7 +137,8 @@ export async function loadWorkspaceData(role: Role) {
     }])
   }
 
-  const voteCounts = new Map((voteCountsResult.data ?? []).map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
+  const voteCountRows = (voteCountsResult.data ?? []) as { vote_type: string; target_id: string; vote_count: number | string }[]
+  const voteCounts = new Map<string, number>(voteCountRows.map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
   const questionVotesByMe = new Set((questionVotesResult.data ?? []).map((vote) => vote.question_id))
   const answerVotesByMe = new Set((answerVotesResult.data ?? []).map((vote) => vote.answer_id))
 
@@ -435,7 +436,8 @@ export async function saveQuestionChanges(previous: KnowledgeQuestion[], next: K
   }
   const { data: voteCounts, error: voteCountError } = await supabase.rpc('get_workspace_vote_counts')
   if (voteCountError) return { error: voteCountError.message }
-  const countByTarget = new Map((voteCounts ?? []).map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
+  const voteCountRows = (voteCounts ?? []) as { vote_type: string; target_id: string; vote_count: number | string }[]
+  const countByTarget = new Map<string, number>(voteCountRows.map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
   return {
     questions: next.map((question) => ({
       ...question,
