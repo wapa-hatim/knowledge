@@ -80,7 +80,7 @@ export interface WorkspaceSettings {
 export interface KnowledgeAsset {
 	id: string
 	name: string
-	kind: 'PDF' | 'DOCX' | 'Spreadsheet' | 'Slides' | 'Video' | 'Diagram' | 'Audio' | 'OpenAPI' | 'Release notes'
+	kind: 'PDF' | 'DOCX' | 'Spreadsheet' | 'Slides' | 'Image' | 'Video' | 'Diagram' | 'Audio' | 'OpenAPI' | 'Release notes'
 	space: string
 	size: string
 	updated: string

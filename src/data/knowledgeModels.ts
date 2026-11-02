@@ -1,4 +1,14 @@
-import type { KnowledgeModel } from '../types'
+import type { KnowledgeAsset, KnowledgeIntegration, KnowledgeModel } from '../types'
+
+export const initialKnowledgeAssets: KnowledgeAsset[] = [
+  { id: 'AS-014', name: 'Platform service map.png', kind: 'Diagram', space: 'Engineering', size: '2.4 MB', updated: 'Today', status: 'Indexed' },
+  { id: 'AS-013', name: 'Customer onboarding session.mp4', kind: 'Video', space: 'Customer Success', size: '48.2 MB', updated: 'Yesterday', status: 'Indexed' },
+  { id: 'AS-012', name: 'Security controls checklist.pdf', kind: 'PDF', space: 'Security', size: '860 KB', updated: '2 days ago', status: 'Indexed' },
+]
+
+export const initialKnowledgeIntegrations: KnowledgeIntegration[] = []
+
+export const initialTaxonomyTerms = ['onboarding', 'security', 'devops', 'customer-success', 'incident-response', 'access-control']
 
 export const initialKnowledgeModels: KnowledgeModel[] = [
   {

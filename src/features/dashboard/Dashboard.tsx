@@ -6,12 +6,24 @@ import { KnowledgeTable } from '../knowledge/KnowledgeTable'
 
 interface DashboardProps { role: Role; articles: Article[]; onNavigate: (view: View) => void; onNewArticle: () => void; onOpenArticle: (article: Article) => void }
 const dashboardCopy: Record<Role, { eyebrow: string; description: string }> = {
-  'Super Admin': { eyebrow: 'MONDAY, NOVEMBER 2, 2026', description: 'Here’s what’s happening across your knowledge workspace.' },
+  'Super Admin': { eyebrow: 'YOUR WORKSPACE', description: 'Here’s what’s happening across your knowledge workspace.' },
   'Space Admin': { eyebrow: 'ENGINEERING SPACE', description: 'A clear view of your space, its people, and the knowledge they rely on.' },
   Author: { eyebrow: 'YOUR CONTRIBUTIONS', description: 'Your ideas are becoming the answers your team needs.' },
   Reviewer: { eyebrow: 'YOUR REVIEW DESK', description: 'A few thoughtful reviews can keep your team’s knowledge trustworthy.' },
   Viewer: { eyebrow: 'YOUR KNOWLEDGE HOME', description: 'Pick up where you left off or find something useful for today.' },
 }
+
+function getGreeting(date: Date) {
+  const hour = date.getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function getTodayLabel(date: Date) {
+  return new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(date).toUpperCase()
+}
+
 const metrics: Record<Role, { label: string; value: string; delta: string; icon: typeof FileText; tone: string }[]> = {
   'Super Admin': [{ label: 'Published articles', value: '248', delta: '+12 this month', icon: FileText, tone: 'tone-mint' }, { label: 'Active contributors', value: '38', delta: '+4 this month', icon: Users, tone: 'tone-blue' }, { label: 'Awaiting review', value: '12', delta: '4 due this week', icon: Clock3, tone: 'tone-peach' }, { label: 'Knowledge reach', value: '84%', delta: '+6.4% this month', icon: BookOpen, tone: 'tone-lilac' }],
   'Space Admin': [{ label: 'Space articles', value: '86', delta: '+7 this month', icon: FileText, tone: 'tone-mint' }, { label: 'Active contributors', value: '14', delta: '2 new this month', icon: Users, tone: 'tone-blue' }, { label: 'Awaiting review', value: '5', delta: '2 due this week', icon: Clock3, tone: 'tone-peach' }, { label: 'Fresh content', value: '91%', delta: 'Updated in 6 months', icon: BookOpen, tone: 'tone-lilac' }],
@@ -21,8 +33,9 @@ const metrics: Record<Role, { label: string; value: string; delta: string; icon:
 }
 
 export function Dashboard({ role, articles, onNavigate, onNewArticle, onOpenArticle }: DashboardProps) {
+  const currentDate = new Date()
   const focusArticles = role === 'Reviewer' ? articles.filter((article) => article.status === 'Under review') : role === 'Author' ? articles.filter((article) => article.owner === 'Amina Yusuf' || article.status === 'Draft') : articles
-  return <section className="page-section dashboard-page"><div className="page-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />{dashboardCopy[role].eyebrow}</div><h1>Good morning, Amina<span className="greeting-period">.</span></h1><p>{dashboardCopy[role].description}</p></div><div className="heading-actions"><Button variant="outline" onClick={() => onNavigate('library')}><BookOpen size={15} />Browse library</Button>{role !== 'Viewer' && <Button onClick={onNewArticle}><Plus size={16} />Create article</Button>}</div></div>
+  return <section className="page-section dashboard-page"><div className="page-heading dashboard-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />{role === 'Super Admin' ? getTodayLabel(currentDate) : dashboardCopy[role].eyebrow}</div><h1>{getGreeting(currentDate)}, Amina<span className="greeting-period">.</span></h1><p>{dashboardCopy[role].description}</p></div><div className="heading-actions"><Button variant="outline" onClick={() => onNavigate('library')}><BookOpen size={15} />Browse library</Button>{role !== 'Viewer' && <Button onClick={onNewArticle}><Plus size={16} />Add knowledge</Button>}</div></div>
     {role === 'Viewer' && <button className="answer-banner" type="button" onClick={() => onNavigate('questions')}><div className="answer-icon"><Sparkles size={17} /></div><div><strong>Looking for something specific?</strong><span>Ask Atlas to find a trusted answer across your workspace.</span></div><ArrowRight size={17} /> </button>}
     <div className="metric-grid">{metrics[role].map((metric, index) => { const Icon = metric.icon; return <article className="metric-card" key={metric.label} style={{ animationDelay: `${index * 55}ms` }}><div className="metric-top"><span>{metric.label}</span><span className={`metric-icon ${metric.tone}`}><Icon size={17} /></span></div><div className="metric-value">{metric.value}</div><div className="metric-delta"><ArrowUpRight size={13} />{metric.delta}</div></article> })}</div>
     <div className="dashboard-main-grid"><section className="panel recent-panel"><div className="panel-heading recent-heading"><div><div className="eyebrow">{role === 'Reviewer' ? 'NEEDS YOUR EYES' : 'PICK UP WHERE YOU LEFT OFF'}</div><h2>{role === 'Reviewer' ? 'Your review queue' : role === 'Viewer' ? 'Recently updated' : 'Recent knowledge'}</h2></div><button className="text-action" type="button" onClick={() => onNavigate(role === 'Reviewer' ? 'reviews' : 'library')}>View all <ArrowRight size={14} /></button></div><Tabs.Root defaultValue="all" className="dashboard-tabs"><Tabs.List aria-label="Filter recent knowledge"><Tabs.Trigger value="all">For you</Tabs.Trigger><Tabs.Trigger value="updated">Recently updated</Tabs.Trigger><Tabs.Trigger value="popular">Popular</Tabs.Trigger></Tabs.List><Tabs.Content value="all"><ArticleFocusList articles={focusArticles.slice(0, 4)} onOpenArticle={onOpenArticle} /></Tabs.Content><Tabs.Content value="updated"><ArticleFocusList articles={[...articles].reverse().slice(0, 4)} onOpenArticle={onOpenArticle} /></Tabs.Content><Tabs.Content value="popular"><ArticleFocusList articles={[...articles].sort((a, b) => Number.parseFloat(b.views) - Number.parseFloat(a.views)).slice(0, 4)} onOpenArticle={onOpenArticle} /></Tabs.Content></Tabs.Root></section>

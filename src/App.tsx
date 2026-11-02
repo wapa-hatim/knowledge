@@ -5,12 +5,15 @@ import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { CreateArticleDialog } from './features/knowledge/CreateArticleDialog'
 import { KnowledgeTable } from './features/knowledge/KnowledgeTable'
+import { AddKnowledgeDialog, type KnowledgeAction } from './features/knowledge/AddKnowledgeDialog'
+import { KnowledgeAssetDialog } from './features/knowledge/KnowledgeAssetDialog'
+import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialog'
 import { articleBodies, initialArticles } from './data/knowledge'
 import { initialAuditEvents, initialQuestions, initialSpaces, initialUsers } from './data/workspace'
-import { initialKnowledgeModels } from './data/knowledgeModels'
+import { initialKnowledgeAssets, initialKnowledgeIntegrations, initialKnowledgeModels, initialTaxonomyTerms } from './data/knowledgeModels'
 import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
-import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
+import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
 const SearchResults = lazy(() => import('./features/knowledge/SearchResults').then((module) => ({ default: module.SearchResults })))
@@ -37,6 +40,9 @@ function App() {
   const [activeView, setActiveView] = useState<View>('overview')
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
+  const [isAssetOpen, setIsAssetOpen] = useState(false)
+  const [isSourceOpen, setIsSourceOpen] = useState(false)
   const [isSpaceCreateOpen, setIsSpaceCreateOpen] = useState(false)
   const [createSpace, setCreateSpace] = useState('Engineering')
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
@@ -49,6 +55,9 @@ function App() {
   const [bookmarks, setBookmarks] = usePersistentState<string[]>('atlas-bookmarks', [])
   const [zeroResultQueries, setZeroResultQueries] = usePersistentState<string[]>('atlas-search-gaps', [])
   const [settings, setSettings] = usePersistentState<WorkspaceSettings>('atlas-settings', defaultSettings)
+  const [knowledgeAssets, setKnowledgeAssets] = usePersistentState<KnowledgeAsset[]>('atlas-assets', initialKnowledgeAssets)
+  const [knowledgeIntegrations, setKnowledgeIntegrations] = usePersistentState<KnowledgeIntegration[]>('atlas-integrations', initialKnowledgeIntegrations)
+  const [taxonomyTerms, setTaxonomyTerms] = usePersistentState<string[]>('atlas-taxonomy', initialTaxonomyTerms)
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
   const visibleArticles = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -65,6 +74,30 @@ function App() {
     setIsCreateOpen(false)
     addEvent(article.owner, 'Created draft', article.title, 'Content')
     setActiveView('library')
+  }
+  const handleKnowledgeAction = (action: KnowledgeAction) => {
+    if (action === 'article') openCreateForSpace('Engineering')
+    if (action === 'asset') setIsAssetOpen(true)
+    if (action === 'metadata' || action === 'ai-context') setActiveView('models')
+    if (action === 'question') setActiveView('questions')
+    if (action === 'source') setIsSourceOpen(true)
+  }
+  const addKnowledgeAsset = (asset: KnowledgeAsset) => {
+    setKnowledgeAssets((current) => [asset, ...current])
+    setIsAssetOpen(false)
+    addEvent('Amina Yusuf', 'Added knowledge asset', asset.name, 'Content')
+    setActiveView('models')
+  }
+  const addKnowledgeIntegration = (integration: KnowledgeIntegration) => {
+    setKnowledgeIntegrations((current) => [integration, ...current])
+    setIsSourceOpen(false)
+    addEvent('Amina Yusuf', 'Added source connector', integration.name, 'Workspace')
+    setActiveView('models')
+  }
+  const addTaxonomyTerm = (term: string) => {
+    if (taxonomyTerms.includes(term)) return
+    setTaxonomyTerms((current) => [...current, term])
+    addEvent('Amina Yusuf', 'Added taxonomy term', `#${term}`, 'Workspace')
   }
   const openArticle = (article: Article) => {
     setSelectedArticleId(article.id)
@@ -130,11 +163,11 @@ function App() {
   return <div className="app-shell">
     <Sidebar activeView={activeView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} activeView={activeView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onNewArticle={() => openCreateForSpace('Engineering')} />
+      <Topbar role={role} activeView={activeView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} />
       <main className="page-content"><Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
-        {activeView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
-        {activeView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
-        {activeView === 'models' && <KnowledgeModelsHub models={initialKnowledgeModels} onNavigate={setActiveView} />}
+        {activeView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {activeView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {activeView === 'models' && <KnowledgeModelsHub models={initialKnowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace('Engineering')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {activeView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {activeView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {activeView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => setBookmarks((current) => current.includes(selectedArticle.id) ? current.filter((id) => id !== selectedArticle.id) : [...current, selectedArticle.id])} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
@@ -147,6 +180,9 @@ function App() {
       </Suspense></main>
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Amina Yusuf" initialSpace={createSpace} />
+    <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} />
+    <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} />
+    <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} />
   </div>
 }
 
