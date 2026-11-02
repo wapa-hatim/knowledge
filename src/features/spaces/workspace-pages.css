@@ -4,6 +4,8 @@
 .space-card-footer .space-card-actions button:hover { border-color: #a1a1aa; background: #f4f4f5; }
 .setting-row select { max-width: 180px; min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d4d4d8; border-radius: 6px; color: #3f3f46; background-color: #fff; font-size: 11px; }
 .spaces-page, .questions-page, .admin-page { gap: 17px; }
+.space-back-action { min-height: 36px; padding: 0 13px; border-color: #28644f; border-radius: 6px; color: #fff; background: #28644f; box-shadow: none; font-size: 11px; font-weight: 600; }
+.space-back-action:hover { border-color: #1d5241; color: #fff; background: #1d5241; }
 .space-search { width: min(620px, 100%); min-height: 42px; }
 .spaces-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
 .space-card { min-width: 0; padding: 16px; border: 1px solid #e5ebe6; border-radius: 7px; background: #fff; box-shadow: 0 2px 5px #28433508; transition: border-color .2s ease, transform .2s ease; }.space-card:hover { border-color: #c5d8ca; transform: translateY(-2px); }
