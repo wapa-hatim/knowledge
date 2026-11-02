@@ -28,6 +28,7 @@ export interface KnowledgeQuestion {
 	author: string
 	createdAt: string
 	votes: number
+	votedByMe?: boolean
 	answers: QuestionAnswer[]
 	acceptedAnswerId?: string
 }
@@ -37,6 +38,7 @@ export interface QuestionAnswer {
 	author: string
 	body: string
 	votes: number
+	votedByMe?: boolean
 	verified: boolean
 }
 

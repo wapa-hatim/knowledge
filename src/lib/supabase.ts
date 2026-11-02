@@ -24,6 +24,7 @@ export interface WorkspaceAdminData {
 }
 
 export interface WorkspaceData {
+  currentUserName: string
   articles: Article[]
   questions: KnowledgeQuestion[]
   spaces: KnowledgeSpace[]
@@ -76,7 +77,7 @@ export async function loadWorkspaceData(role: Role) {
     ? supabase.from('search_queries').select('query, result_count, created_at').eq('result_count', 0).order('created_at', { ascending: false }).limit(50)
     : Promise.resolve({ data: [], error: null })
 
-  const [spacesResult, categoriesResult, articlesResult, commentsResult, versionsResult, questionsResult, answersResult, assetsResult, modelsResult, integrationsResult, taxonomyResult, bookmarksResult, settingsResult, searchQueriesResult, profilesResult] = await Promise.all([
+  const [spacesResult, categoriesResult, articlesResult, commentsResult, versionsResult, questionsResult, answersResult, assetsResult, modelsResult, integrationsResult, taxonomyResult, bookmarksResult, settingsResult, searchQueriesResult, profilesResult, voteCountsResult, questionVotesResult, answerVotesResult] = await Promise.all([
     supabase.from('spaces').select('id, name, description, color, owner_id, parent_id').order('name'),
     supabase.from('categories').select('id, space_id, name, parent_id').order('name'),
     supabase.from('articles').select('id, space_id, category_id, title, summary, body, status, owner_id, author_id, tags, view_count, review_due_at, updated_at').order('updated_at', { ascending: false }),
@@ -92,9 +93,12 @@ export async function loadWorkspaceData(role: Role) {
     supabase.from('workspace_settings').select('key, value'),
     searchQueriesQuery,
     supabase.from('profiles').select('id, display_name'),
+    supabase.rpc('get_workspace_vote_counts'),
+    supabase.from('question_votes').select('question_id').eq('user_id', authData.user.id),
+    supabase.from('answer_votes').select('answer_id').eq('user_id', authData.user.id),
   ])
 
-  const results = [spacesResult, categoriesResult, articlesResult, commentsResult, versionsResult, questionsResult, answersResult, assetsResult, modelsResult, integrationsResult, taxonomyResult, bookmarksResult, settingsResult, searchQueriesResult, profilesResult]
+  const results = [spacesResult, categoriesResult, articlesResult, commentsResult, versionsResult, questionsResult, answersResult, assetsResult, modelsResult, integrationsResult, taxonomyResult, bookmarksResult, settingsResult, searchQueriesResult, profilesResult, voteCountsResult, questionVotesResult, answerVotesResult]
   const queryError = results.find((result) => result.error)?.error
   if (queryError) return { data: null, error: queryError.message }
 
@@ -133,6 +137,10 @@ export async function loadWorkspaceData(role: Role) {
     }])
   }
 
+  const voteCounts = new Map((voteCountsResult.data ?? []).map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
+  const questionVotesByMe = new Set((questionVotesResult.data ?? []).map((vote) => vote.question_id))
+  const answerVotesByMe = new Set((answerVotesResult.data ?? []).map((vote) => vote.answer_id))
+
   const articles: Article[] = (articlesResult.data ?? []).map((article) => {
     const space = spacesById.get(article.space_id)
     const owner = profilesById.get(article.owner_id ?? article.author_id) ?? 'Workspace member'
@@ -162,7 +170,8 @@ export async function loadWorkspaceData(role: Role) {
       id: answer.id,
       author: profilesById.get(answer.author_id) ?? 'Workspace member',
       body: answer.body,
-      votes: 0,
+      votes: voteCounts.get(`answer:${answer.id}`) ?? 0,
+      votedByMe: answerVotesByMe.has(answer.id),
       verified: Boolean(answer.verified_by),
     }])
   }
@@ -174,7 +183,8 @@ export async function loadWorkspaceData(role: Role) {
     tags: question.tags ?? [],
     author: profilesById.get(question.author_id) ?? 'Workspace member',
     createdAt: relativeDate(question.created_at),
-    votes: 0,
+    votes: voteCounts.get(`question:${question.id}`) ?? 0,
+    votedByMe: questionVotesByMe.has(question.id),
     answers: (answersByQuestion.get(question.id) ?? []).map((answer) => ({ ...answer, verified: answer.verified || answer.id === question.accepted_answer_id })),
     acceptedAnswerId: question.accepted_answer_id ?? undefined,
   }))
@@ -223,6 +233,7 @@ export async function loadWorkspaceData(role: Role) {
 
   const storedSettings = (settingsResult.data ?? []).find((item) => item.key === 'workspace')?.value as Partial<WorkspaceSettings> | undefined
   const data: WorkspaceData = {
+    currentUserName: profilesById.get(authData.user.id) ?? authData.user.email?.split('@')[0] ?? 'Workspace member',
     articles,
     questions,
     spaces,
@@ -235,6 +246,236 @@ export async function loadWorkspaceData(role: Role) {
     settings: { ...defaultWorkspaceSettings, ...storedSettings },
   }
   return { data, error: null }
+}
+
+async function getAuthenticatedUserId() {
+  if (!supabase) return { id: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) return { id: null, error: error?.message ?? 'Sign in to make workspace changes.' }
+  return { id: data.user.id, error: null }
+}
+
+async function getSpaceId(name: string) {
+  if (!supabase) return { id: null, error: 'Supabase is not configured.' }
+  const { data, error } = await supabase.from('spaces').select('id').eq('name', name).single()
+  return { id: data?.id ?? null, error: error?.message ?? null }
+}
+
+export async function saveArticleRecord(article: Article) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { id: spaceId, error: spaceError } = await getSpaceId(article.space)
+  if (spaceError || !spaceId) return { error: spaceError ?? 'Choose an existing space.' }
+  const { data: category } = await supabase.from('categories').select('id').eq('space_id', spaceId).eq('name', article.category).maybeSingle()
+  const record = {
+    space_id: spaceId,
+    category_id: category?.id ?? null,
+    title: article.title,
+    summary: article.summary,
+    body: article.body ?? '',
+    status: article.status,
+    tags: article.tags,
+    review_due_at: article.reviewDue && article.reviewDue !== 'Not scheduled' ? new Date(article.reviewDue).toISOString() : null,
+  }
+  const { data: existing } = await supabase.from('articles').select('id').eq('id', article.id).maybeSingle()
+  const result = existing
+    ? await supabase.from('articles').update(record).eq('id', article.id)
+    : await supabase.from('articles').insert({ ...record, author_id: userId, owner_id: userId })
+  return { error: result.error?.message ?? null }
+}
+
+export async function saveArticleComment(articleId: string, body: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('article_comments').insert({ article_id: articleId, author_id: userId, body })
+  return { error: error?.message ?? null }
+}
+
+export async function saveArticleVersion(article: Article, body: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error: versionError } = await supabase.from('article_versions').insert({
+    article_id: article.id,
+    title: article.title,
+    body,
+    status: article.status,
+    author_id: userId,
+  })
+  if (versionError) return { error: versionError.message }
+  return saveArticleRecord({ ...article, body })
+}
+
+export async function createSpaceRecord(space: KnowledgeSpace) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const slug = space.name.toLowerCase().replace(/&/g, ' ').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const { data: createdSpace, error: spaceError } = await supabase.from('spaces').insert({
+    name: space.name,
+    slug,
+    description: space.description,
+    color: space.color,
+    owner_id: userId,
+  }).select('id').single()
+  if (spaceError || !createdSpace) return { error: spaceError?.message ?? 'Could not create the space.' }
+  const categories = [...new Set(space.categories.map((category) => category.trim()).filter(Boolean))]
+  if (categories.length) {
+    const { error } = await supabase.from('categories').insert(categories.map((name) => ({ space_id: createdSpace.id, name })))
+    if (error) {
+      await supabase.from('spaces').delete().eq('id', createdSpace.id)
+      return { error: error.message }
+    }
+  }
+  return { error: null }
+}
+
+export async function saveQuestionChanges(previous: KnowledgeQuestion[], next: KnowledgeQuestion[]) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const previousById = new Map(previous.map((question) => [question.id, question]))
+  const nextIds = new Set(next.map((question) => question.id))
+
+  for (const question of next) {
+    const { id: spaceId, error: spaceError } = await getSpaceId(question.space)
+    if (spaceError || !spaceId) return { error: spaceError ?? `Space "${question.space}" does not exist.` }
+    const previousQuestion = previousById.get(question.id)
+    const questionRecord = {
+      space_id: spaceId,
+      title: question.title,
+      body: question.body,
+      tags: question.tags,
+      accepted_answer_id: question.acceptedAnswerId ?? null,
+    }
+    const questionResult = previousQuestion
+      ? await supabase.from('knowledge_questions').update(questionRecord).eq('id', question.id)
+      : await supabase.from('knowledge_questions').insert({ ...questionRecord, id: question.id, author_id: userId })
+    if (questionResult.error) return { error: questionResult.error.message }
+
+    if (previousQuestion && question.votedByMe !== previousQuestion.votedByMe) {
+      const voteResult = question.votedByMe
+        ? await supabase.from('question_votes').upsert({ question_id: question.id, user_id: userId }, { onConflict: 'question_id,user_id', ignoreDuplicates: true })
+        : await supabase.from('question_votes').delete().eq('question_id', question.id).eq('user_id', userId)
+      if (voteResult.error) return { error: voteResult.error.message }
+    }
+
+    const oldAnswers = new Map((previousQuestion?.answers ?? []).map((answer) => [answer.id, answer]))
+    for (const answer of question.answers) {
+      const oldAnswer = oldAnswers.get(answer.id)
+      if (!oldAnswer) {
+        const { error } = await supabase.from('question_answers').insert({
+          id: answer.id,
+          question_id: question.id,
+          author_id: userId,
+          body: answer.body,
+          verified_by: answer.verified ? userId : null,
+        })
+        if (error) return { error: error.message }
+      } else if (oldAnswer.verified !== answer.verified) {
+        const { error } = await supabase.from('question_answers').update({ verified_by: answer.verified ? userId : null }).eq('id', answer.id)
+        if (error) return { error: error.message }
+      }
+      if (oldAnswer && answer.votedByMe !== oldAnswer.votedByMe) {
+        const voteResult = answer.votedByMe
+          ? await supabase.from('answer_votes').upsert({ answer_id: answer.id, user_id: userId }, { onConflict: 'answer_id,user_id', ignoreDuplicates: true })
+          : await supabase.from('answer_votes').delete().eq('answer_id', answer.id).eq('user_id', userId)
+        if (voteResult.error) return { error: voteResult.error.message }
+      }
+    }
+  }
+
+  for (const question of previous) {
+    if (nextIds.has(question.id)) continue
+    const { error } = await supabase.from('knowledge_questions').delete().eq('id', question.id)
+    if (error) return { error: error.message }
+  }
+  const { data: voteCounts, error: voteCountError } = await supabase.rpc('get_workspace_vote_counts')
+  if (voteCountError) return { error: voteCountError.message }
+  const countByTarget = new Map((voteCounts ?? []).map((vote) => [`${vote.vote_type}:${vote.target_id}`, Number(vote.vote_count)]))
+  return {
+    questions: next.map((question) => ({
+      ...question,
+      votes: countByTarget.get(`question:${question.id}`) ?? 0,
+      answers: question.answers.map((answer) => ({ ...answer, votes: countByTarget.get(`answer:${answer.id}`) ?? 0 })),
+    })),
+    error: null,
+  }
+}
+
+export async function saveWorkspaceSettings(settings: WorkspaceSettings) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('workspace_settings').upsert({ key: 'workspace', value: settings, updated_by: userId })
+  return { error: error?.message ?? null }
+}
+
+export async function setArticleBookmark(articleId: string, bookmarked: boolean) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const result = bookmarked
+    ? await supabase.from('bookmarks').upsert({ user_id: userId, article_id: articleId })
+    : await supabase.from('bookmarks').delete().eq('user_id', userId).eq('article_id', articleId)
+  return { error: result.error?.message ?? null }
+}
+
+export async function recordSearchGap(query: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('search_queries').insert({ user_id: userId, query, result_count: 0 })
+  return { error: error?.message ?? null }
+}
+
+export async function createIntegrationRecord(integration: KnowledgeIntegration) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('knowledge_integrations').insert({
+    name: integration.name,
+    description: integration.description,
+    category: integration.category,
+    connected: integration.connected,
+    created_by: userId,
+  })
+  return { error: error?.message ?? null }
+}
+
+export async function createTaxonomyTerm(name: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { error: userError }
+  const { error } = await supabase.from('taxonomy_terms').insert({ name, created_by: userId })
+  return { error: error?.message ?? null }
+}
+
+export async function recordAuditEvent(action: string, target: string, type: AuditEvent['type']) {
+  if (!supabase) return { data: null, error: 'Supabase is not configured.' }
+  const { id: userId, error: userError } = await getAuthenticatedUserId()
+  if (userError || !userId) return { data: null, error: userError }
+  const { data, error } = await supabase.from('audit_events').insert({
+    actor_id: userId,
+    action,
+    target_type: type,
+    target_id: target,
+    details: { target },
+  }).select('id, created_at').single()
+  if (error || !data) return { data: null, error: error?.message ?? 'Could not record this workspace event.' }
+  return {
+    data: {
+      id: data.id,
+      actor: 'You',
+      action,
+      target,
+      date: new Date(data.created_at).toLocaleString(),
+      type,
+    } satisfies AuditEvent,
+    error: null,
+  }
 }
 
 export async function loadWorkspaceAdminData() {

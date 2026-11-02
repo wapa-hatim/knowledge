@@ -12,7 +12,7 @@ import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialo
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { createIntegrationRecord, createSpaceRecord, createTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -30,8 +30,6 @@ const roleViews: Record<Role, View[]> = {
 }
 
 const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadenceMonths: 6, notifyOwners: true, allowGuestQuestions: true, defaultArticleVisibility: 'Space members' }
-const createAuditEventId = () => `EV-${Date.now()}`
-const createArticleVersionId = () => `V-${Date.now()}`
 const formatTimestamp = () => new Date().toLocaleString()
 const resolveRoleFromMetadata = (role: unknown): Role => {
   const allowedRoles: Role[] = ['Super Admin', 'Space Admin', 'Author', 'Reviewer', 'Viewer']
@@ -190,15 +188,21 @@ function App() {
     }
   }, [])
 
-  const addEvent = (actor: string, action: string, target: string, type: AuditEvent['type']) => {
-    setAuditEvents((current) => [{ id: createAuditEventId(), actor, action, target, type, date: 'Just now' }, ...current])
+  const addEvent = (_actor: string, action: string, target: string, type: AuditEvent['type']) => {
+    void recordAuditEvent(action, target, type).then(({ data, error }) => {
+      if (data) setAuditEvents((current) => [data, ...current])
+      else if (error) setWorkspaceDataError(error)
+    })
   }
-  const addArticle = (article: Article) => {
-    const newArticle = { ...article, body: article.body ?? `# ${article.title}\n\nStart with the purpose of this article.`, reviewDue: 'January 19, 2027' }
+  const addArticle = async (article: Article) => {
+    const newArticle = { ...article, body: article.body ?? '', reviewDue: 'Not scheduled' }
+    const { error } = await saveArticleRecord(newArticle)
+    if (error) return error
     setArticles((current) => [newArticle, ...current])
     setIsCreateOpen(false)
     addEvent(article.owner, 'Created draft', article.title, 'Content')
     setActiveView('library')
+    return null
   }
   const handleKnowledgeAction = (action: KnowledgeAction) => {
     if (action === 'article') openCreateForSpace(knowledgeSpaceContext)
@@ -216,43 +220,119 @@ function App() {
     setActiveView('models')
     return null
   }
-  const addKnowledgeIntegration = (integration: KnowledgeIntegration) => {
+  const addKnowledgeIntegration = async (integration: KnowledgeIntegration) => {
+    const { error } = await createIntegrationRecord(integration)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
     setKnowledgeIntegrations((current) => [integration, ...current])
     setIsSourceOpen(false)
     addEvent('Atlas Admin', 'Added source connector', integration.name, 'Workspace')
     setActiveView('models')
   }
-  const addTaxonomyTerm = (term: string) => {
+  const addTaxonomyTerm = async (term: string) => {
     if (taxonomyTerms.includes(term)) return
+    const { error } = await createTaxonomyTerm(term)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
     setTaxonomyTerms((current) => [...current, term])
     addEvent('Atlas Admin', 'Added taxonomy term', `#${term}`, 'Workspace')
+  }
+  const changeWorkspaceSettings = async (nextSettings: WorkspaceSettings) => {
+    const { error } = await saveWorkspaceSettings(nextSettings)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    setSettings(nextSettings)
+  }
+  const changeQuestions = async (nextQuestions: KnowledgeQuestion[]) => {
+    const { questions: savedQuestions, error } = await saveQuestionChanges(questions, nextQuestions)
+    if (error) {
+      setWorkspaceDataError(error)
+      return null
+    }
+    const result = savedQuestions ?? nextQuestions
+    setQuestions(result)
+    return result
+  }
+  const toggleBookmark = async (articleId: string) => {
+    const shouldBookmark = !bookmarks.includes(articleId)
+    const { error } = await setArticleBookmark(articleId, shouldBookmark)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    setBookmarks((current) => shouldBookmark ? [...current, articleId] : current.filter((id) => id !== articleId))
+  }
+  const saveZeroResult = async (query: string) => {
+    const normalized = query.trim()
+    if (!normalized || zeroResultQueries.includes(normalized)) return
+    const { error } = await recordSearchGap(normalized)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    setZeroResultQueries((current) => [normalized, ...current])
   }
   const openArticle = (article: Article) => {
     setSelectedArticleId(article.id)
     setActiveView('article')
   }
   const updateArticle = (id: string, update: (article: Article) => Article) => setArticles((current) => current.map((article) => article.id === id ? update(article) : article))
-  const autosaveArticle = (body: string) => {
-    if (selectedArticle) updateArticle(selectedArticle.id, (article) => ({ ...article, body, updated: 'Just now' }))
-  }
-  const saveArticleVersion = (body: string) => {
+  const autosaveArticle = async (body: string) => {
     if (!selectedArticle) return
-    const version: ArticleVersion = { id: createArticleVersionId(), title: selectedArticle.title, body, status: selectedArticle.status, author: 'Atlas Admin', savedAt: formatTimestamp() }
+    const updatedArticle = { ...selectedArticle, body, updated: 'Just now' }
+    const { error } = await saveArticleRecord(updatedArticle)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    updateArticle(selectedArticle.id, () => updatedArticle)
+  }
+  const saveArticleVersion = async (body: string) => {
+    if (!selectedArticle) return
+    const { error } = await saveArticleVersionRecord(selectedArticle, body)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    const version: ArticleVersion = { id: crypto.randomUUID(), title: selectedArticle.title, body, status: selectedArticle.status, author: selectedArticle.owner, savedAt: formatTimestamp() }
     updateArticle(selectedArticle.id, (article) => ({ ...article, body, versions: [version, ...(article.versions ?? [])] }))
     addEvent('Atlas Admin', 'Saved version', selectedArticle.title, 'Content')
   }
-  const changeArticleStatus = (status: ArticleStatus) => {
+  const changeArticleStatus = async (status: ArticleStatus) => {
     if (!selectedArticle) return
-    updateArticle(selectedArticle.id, (article) => ({ ...article, status, updated: 'Just now' }))
+    const updatedArticle = { ...selectedArticle, status, updated: 'Just now' }
+    const { error } = await saveArticleRecord(updatedArticle)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    updateArticle(selectedArticle.id, () => updatedArticle)
     addEvent('Atlas Admin', `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
   }
-  const addArticleComment = (comment: ArticleComment) => {
+  const addArticleComment = async (comment: ArticleComment) => {
     if (!selectedArticle) return
+    const { error } = await saveArticleComment(selectedArticle.id, comment.body)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
     updateArticle(selectedArticle.id, (article) => ({ ...article, comments: [...(article.comments ?? []), comment] }))
   }
-  const restoreArticleVersion = (version: ArticleVersion) => {
+  const restoreArticleVersion = async (version: ArticleVersion) => {
     if (!selectedArticle) return
-    updateArticle(selectedArticle.id, (article) => ({ ...article, body: version.body, status: version.status, updated: 'Just now' }))
+    const updatedArticle = { ...selectedArticle, body: version.body, status: version.status, updated: 'Just now' }
+    const { error } = await saveArticleRecord(updatedArticle)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
+    updateArticle(selectedArticle.id, () => updatedArticle)
     addEvent('Atlas Admin', 'Restored version', selectedArticle.title, 'Content')
   }
   const updateUser = async (user: WorkspaceUser) => {
@@ -300,7 +380,7 @@ function App() {
     return null
   }
   const openCreateForSpace = (spaceName: string) => {
-    setCreateSpace(spaceName)
+    setCreateSpace(spaceName || spaces[0]?.name || '')
     setIsCreateOpen(true)
   }
   const openSpace = (spaceName: string) => {
@@ -312,12 +392,14 @@ function App() {
     setActiveView('spaces')
     setIsSpaceCreateOpen(true)
   }
-  const createSpaceItem = (space: KnowledgeSpace) => {
+  const createSpaceItem = async (space: KnowledgeSpace) => {
+    const { error } = await createSpaceRecord(space)
+    if (error) {
+      setWorkspaceDataError(error)
+      return
+    }
     setSpaces((current) => [...current, space])
     addEvent('Atlas Admin', 'Created space', space.name, 'Workspace')
-  }
-  const saveZeroResult = (query: string) => {
-    setZeroResultQueries((current) => current.includes(query) ? current : [query, ...current])
   }
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -385,17 +467,17 @@ function App() {
         {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
-        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => setBookmarks((current) => current.includes(selectedArticle.id) ? current.filter((id) => id !== selectedArticle.id) : [...current, selectedArticle.id])} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
+        {effectiveView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onCreateSpace={createSpaceItem} />}
-        {effectiveView === 'questions' && <QuestionsView questions={questions} role={role} initialSpace={knowledgeSpaceContext} onQuestionsChange={setQuestions} />}
+        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
         {effectiveView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} />}
-        {effectiveView === 'people' && <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
-        {effectiveView === 'settings' && <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
-        {effectiveView === 'audit' && <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
+        {effectiveView === 'people' && <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
+        {effectiveView === 'settings' && <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
+        {effectiveView === 'audit' && <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={adminDataLoading} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />}
       </Suspense></main>
     </div>
-    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Atlas Admin" initialSpace={createSpace} />
+    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Atlas Admin" spaces={spaces} initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
