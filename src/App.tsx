@@ -9,14 +9,10 @@ import { KnowledgeTable } from './features/knowledge/KnowledgeTable'
 import { AddKnowledgeDialog, type KnowledgeAction } from './features/knowledge/AddKnowledgeDialog'
 import { KnowledgeAssetDialog } from './features/knowledge/KnowledgeAssetDialog'
 import { KnowledgeSourceDialog } from './features/knowledge/KnowledgeSourceDialog'
-import { articleBodies, initialArticles } from './data/knowledge'
-import { initialQuestions, initialSpaces } from './data/workspace'
-import { initialKnowledgeAssets, initialKnowledgeIntegrations, initialKnowledgeModels, initialTaxonomyTerms } from './data/knowledgeModels'
-import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
-import { getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, manageWorkspaceUser, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { getCurrentWorkspaceRole, isSupabaseConfigured, loadWorkspaceAdminData, loadWorkspaceData, manageWorkspaceUser, resetPassword, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -33,7 +29,6 @@ const roleViews: Record<Role, View[]> = {
   Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
 }
 
-const storedArticles = initialArticles.map((article) => ({ ...article, body: articleBodies[article.id] ?? `# ${article.title}\n\n${article.summary}`, reviewDue: 'January 19, 2027' }))
 const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadenceMonths: 6, notifyOwners: true, allowGuestQuestions: true, defaultArticleVisibility: 'Space members' }
 const createAuditEventId = () => `EV-${Date.now()}`
 const createArticleVersionId = () => `V-${Date.now()}`
@@ -73,29 +68,32 @@ function App() {
   const [isAssetOpen, setIsAssetOpen] = useState(false)
   const [isSourceOpen, setIsSourceOpen] = useState(false)
   const [isSpaceCreateOpen, setIsSpaceCreateOpen] = useState(false)
-  const [createSpace, setCreateSpace] = useState('Engineering')
+  const [createSpace, setCreateSpace] = useState('')
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [passwordResetOpen, setPasswordResetOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetNotice, setResetNotice] = useState('')
   const effectiveView = roleViews[role].includes(activeView) ? activeView : 'overview'
-  const [articles, setArticles] = usePersistentState<Article[]>('atlas-articles', storedArticles)
-  const [questions, setQuestions] = usePersistentState<KnowledgeQuestion[]>('atlas-questions', initialQuestions)
-  const [spaces, setSpaces] = usePersistentState<KnowledgeSpace[]>('atlas-spaces', initialSpaces)
+  const [articles, setArticles] = useState<Article[]>([])
+  const [questions, setQuestions] = useState<KnowledgeQuestion[]>([])
+  const [spaces, setSpaces] = useState<KnowledgeSpace[]>([])
   const [users, setUsers] = useState<WorkspaceUser[]>([])
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [adminSpaces, setAdminSpaces] = useState<string[]>([])
   const [adminDataLoading, setAdminDataLoading] = useState(false)
   const [adminDataError, setAdminDataError] = useState<string | null>(null)
-  const [bookmarks, setBookmarks] = usePersistentState<string[]>('atlas-bookmarks', [])
-  const [zeroResultQueries, setZeroResultQueries] = usePersistentState<string[]>('atlas-search-gaps', [])
-  const [settings, setSettings] = usePersistentState<WorkspaceSettings>('atlas-settings', defaultSettings)
-  const [knowledgeAssets, setKnowledgeAssets] = usePersistentState<KnowledgeAsset[]>('atlas-assets', initialKnowledgeAssets)
-  const [knowledgeIntegrations, setKnowledgeIntegrations] = usePersistentState<KnowledgeIntegration[]>('atlas-integrations', initialKnowledgeIntegrations)
-  const [taxonomyTerms, setTaxonomyTerms] = usePersistentState<string[]>('atlas-taxonomy', initialTaxonomyTerms)
+  const [workspaceDataLoading, setWorkspaceDataLoading] = useState(false)
+  const [workspaceDataError, setWorkspaceDataError] = useState<string | null>(null)
+  const [bookmarks, setBookmarks] = useState<string[]>([])
+  const [zeroResultQueries, setZeroResultQueries] = useState<string[]>([])
+  const [settings, setSettings] = useState<WorkspaceSettings>(defaultSettings)
+  const [knowledgeAssets, setKnowledgeAssets] = useState<KnowledgeAsset[]>([])
+  const [knowledgeModels, setKnowledgeModels] = useState<KnowledgeModel[]>([])
+  const [knowledgeIntegrations, setKnowledgeIntegrations] = useState<KnowledgeIntegration[]>([])
+  const [taxonomyTerms, setTaxonomyTerms] = useState<string[]>([])
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
-  const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? 'Engineering'
+  const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? spaces[0]?.name ?? ''
   const visibleArticles = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return articles
@@ -113,22 +111,57 @@ function App() {
       }
       if (!active) return
       setRole(nextRole)
-      if (session && !forceLogin && nextRole === 'Super Admin') {
-        setAdminDataLoading(true)
-        const { data: adminData, error } = await loadWorkspaceAdminData()
+      if (session && !forceLogin) {
+        setWorkspaceDataLoading(true)
+        const { data: workspaceData, error: workspaceError } = await loadWorkspaceData(nextRole)
         if (active) {
-          setUsers(adminData?.users ?? [])
-          setAuditEvents(adminData?.events ?? [])
-          setAdminSpaces(adminData?.spaces ?? [])
-          setAdminDataError(error)
-          setAdminDataLoading(false)
+          setArticles(workspaceData?.articles ?? [])
+          setQuestions(workspaceData?.questions ?? [])
+          setSpaces(workspaceData?.spaces ?? [])
+          setKnowledgeAssets(workspaceData?.assets ?? [])
+          setKnowledgeModels(workspaceData?.models ?? [])
+          setKnowledgeIntegrations(workspaceData?.integrations ?? [])
+          setTaxonomyTerms(workspaceData?.taxonomyTerms ?? [])
+          setBookmarks(workspaceData?.bookmarks ?? [])
+          setZeroResultQueries(workspaceData?.zeroResultQueries ?? [])
+          setSettings(workspaceData?.settings ?? defaultSettings)
+          setWorkspaceDataError(workspaceError)
+          setWorkspaceDataLoading(false)
+          if (workspaceData?.spaces[0] && !createSpace) setCreateSpace(workspaceData.spaces[0].name)
+        }
+        if (nextRole === 'Super Admin') {
+          setAdminDataLoading(true)
+          const { data: adminData, error: adminError } = await loadWorkspaceAdminData()
+          if (active) {
+            setUsers(adminData?.users ?? [])
+            setAuditEvents(adminData?.events ?? [])
+            setAdminSpaces(adminData?.spaces ?? [])
+            setAdminDataError(adminError)
+            setAdminDataLoading(false)
+          }
+        } else {
+          setUsers([])
+          setAuditEvents([])
+          setAdminSpaces([])
+          setAdminDataError(null)
         }
       } else {
+        setArticles([])
+        setQuestions([])
+        setSpaces([])
+        setKnowledgeAssets([])
+        setKnowledgeModels([])
+        setKnowledgeIntegrations([])
+        setTaxonomyTerms([])
+        setBookmarks([])
+        setZeroResultQueries([])
         setUsers([])
         setAuditEvents([])
         setAdminSpaces([])
         setAdminDataError(null)
         setAdminDataLoading(false)
+        setWorkspaceDataError(null)
+        setWorkspaceDataLoading(false)
       }
       setIsLoggedOut(forceLogin || !session)
       setIsAuthLoading(false)
@@ -140,6 +173,7 @@ function App() {
     }).catch(() => {
       if (!active) return
       setIsLoggedOut(true)
+      setWorkspaceDataError('Unable to load your Supabase session.')
       setIsAuthLoading(false)
     })
 
