@@ -39,11 +39,11 @@ const createAuditEventId = () => `EV-${Date.now()}`
 const createArticleVersionId = () => `V-${Date.now()}`
 const formatTimestamp = () => new Date().toLocaleString()
 const demoRoleByEmail: Record<string, Role> = {
-  'admin@northstar.studio': 'Super Admin',
-  'engineering@northstar.studio': 'Space Admin',
-  'author@northstar.studio': 'Author',
-  'reviewer@northstar.studio': 'Reviewer',
-  'viewer@northstar.studio': 'Viewer',
+  'admin@atlas.com': 'Super Admin',
+  'spaceadmin@atlas.com': 'Space Admin',
+  'author@atlas.com': 'Author',
+  'reviewer@atlas.com': 'Reviewer',
+  'viewer@atlas.com': 'Viewer',
 }
 const resolveRoleFromEmail = (email: string): Role => demoRoleByEmail[email.trim().toLowerCase()] ?? 'Viewer'
 const defaultWorkflowUrl = () => {
@@ -67,7 +67,7 @@ function App() {
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [passwordResetOpen, setPasswordResetOpen] = useState(false)
-  const [resetEmail, setResetEmail] = useState('hello@northstar.studio')
+  const [resetEmail, setResetEmail] = useState('admin@atlas.com')
   const [resetNotice, setResetNotice] = useState('')
   const effectiveView = roleViews[role].includes(activeView) ? activeView : 'overview'
   const [articles, setArticles] = usePersistentState<Article[]>('atlas-articles', storedArticles)
@@ -109,19 +109,19 @@ function App() {
   const addKnowledgeAsset = (asset: KnowledgeAsset) => {
     setKnowledgeAssets((current) => [asset, ...current])
     setIsAssetOpen(false)
-    addEvent('Amina Yusuf', 'Added knowledge asset', asset.name, 'Content')
+    addEvent('Atlas Admin', 'Added knowledge asset', asset.name, 'Content')
     setActiveView('models')
   }
   const addKnowledgeIntegration = (integration: KnowledgeIntegration) => {
     setKnowledgeIntegrations((current) => [integration, ...current])
     setIsSourceOpen(false)
-    addEvent('Amina Yusuf', 'Added source connector', integration.name, 'Workspace')
+    addEvent('Atlas Admin', 'Added source connector', integration.name, 'Workspace')
     setActiveView('models')
   }
   const addTaxonomyTerm = (term: string) => {
     if (taxonomyTerms.includes(term)) return
     setTaxonomyTerms((current) => [...current, term])
-    addEvent('Amina Yusuf', 'Added taxonomy term', `#${term}`, 'Workspace')
+    addEvent('Atlas Admin', 'Added taxonomy term', `#${term}`, 'Workspace')
   }
   const openArticle = (article: Article) => {
     setSelectedArticleId(article.id)
@@ -142,14 +142,14 @@ function App() {
   }
   const saveArticleVersion = (body: string) => {
     if (!selectedArticle) return
-    const version: ArticleVersion = { id: createArticleVersionId(), title: selectedArticle.title, body, status: selectedArticle.status, author: 'Amina Yusuf', savedAt: formatTimestamp() }
+    const version: ArticleVersion = { id: createArticleVersionId(), title: selectedArticle.title, body, status: selectedArticle.status, author: 'Atlas Admin', savedAt: formatTimestamp() }
     updateArticle(selectedArticle.id, (article) => ({ ...article, body, versions: [version, ...(article.versions ?? [])] }))
-    addEvent('Amina Yusuf', 'Saved version', selectedArticle.title, 'Content')
+    addEvent('Atlas Admin', 'Saved version', selectedArticle.title, 'Content')
   }
   const changeArticleStatus = (status: ArticleStatus) => {
     if (!selectedArticle) return
     updateArticle(selectedArticle.id, (article) => ({ ...article, status, updated: 'Just now' }))
-    addEvent('Amina Yusuf', `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
+    addEvent('Atlas Admin', `${status === 'Under review' ? 'Requested review for' : status === 'Published' ? 'Published' : 'Archived'}`, selectedArticle.title, 'Content')
   }
   const addArticleComment = (comment: ArticleComment) => {
     if (!selectedArticle) return
@@ -158,15 +158,15 @@ function App() {
   const restoreArticleVersion = (version: ArticleVersion) => {
     if (!selectedArticle) return
     updateArticle(selectedArticle.id, (article) => ({ ...article, body: version.body, status: version.status, updated: 'Just now' }))
-    addEvent('Amina Yusuf', 'Restored version', selectedArticle.title, 'Content')
+    addEvent('Atlas Admin', 'Restored version', selectedArticle.title, 'Content')
   }
   const updateUser = (user: WorkspaceUser) => {
     setUsers((current) => current.map((existing) => existing.id === user.id ? user : existing))
-    addEvent('Amina Yusuf', 'Updated member access', `${user.name} · ${user.role} · ${user.status}`, 'Access')
+    addEvent('Atlas Admin', 'Updated member access', `${user.name} · ${user.role} · ${user.status}`, 'Access')
   }
   const inviteUser = (user: WorkspaceUser) => {
     setUsers((current) => [...current, user])
-    addEvent('Amina Yusuf', 'Invited member', user.name, 'Access')
+    addEvent('Atlas Admin', 'Invited member', user.name, 'Access')
   }
   const openCreateForSpace = (spaceName: string) => {
     setCreateSpace(spaceName)
@@ -183,7 +183,7 @@ function App() {
   }
   const createSpaceItem = (space: KnowledgeSpace) => {
     setSpaces((current) => [...current, space])
-    addEvent('Amina Yusuf', 'Created space', space.name, 'Workspace')
+    addEvent('Atlas Admin', 'Created space', space.name, 'Workspace')
   }
   const saveZeroResult = (query: string) => {
     setZeroResultQueries((current) => current.includes(query) ? current : [query, ...current])
@@ -217,7 +217,7 @@ function App() {
     const { error } = await resetPassword(resetEmail.trim())
     setResetNotice(error ?? `Password reset link sent to ${resetEmail.trim()}.`)
     setPasswordResetOpen(false)
-    setResetEmail('hello@northstar.studio')
+    setResetEmail('admin@atlas.com')
   }
 
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in to return to your workspace. This demo stores access in browser state and can be wired to Supabase auth.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="you@company.com" required /><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" placeholder="Enter your password" required /><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)}>Forgot password?</button></div><Button type="submit">Sign in</Button>{resetNotice && <span className="auth-reset-note">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="you@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
@@ -249,7 +249,7 @@ function App() {
         {effectiveView === 'audit' && <AdminView mode="audit" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
       </Suspense></main>
     </div>
-    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Amina Yusuf" initialSpace={createSpace} />
+    <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Atlas Admin" initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />

@@ -16,20 +16,50 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
     })
   : null
 
+const atlasDemoCredentials: Record<string, string> = {
+  'admin@atlas.com': 'Admin@123',
+  'spaceadmin@atlas.com': 'Admin@123',
+  'author@atlas.com': 'Admin@123',
+  'reviewer@atlas.com': 'Admin@123',
+  'viewer@atlas.com': 'Admin@123',
+}
+
 export async function signInWithEmail(email: string, password: string) {
   if (!email.trim() || !password.trim()) {
     return { data: null, error: 'Email and password are required.' }
   }
 
+  const normalizedEmail = email.trim().toLowerCase()
+  const demoPassword = atlasDemoCredentials[normalizedEmail]
+
   if (!supabase) {
-    return {
-      data: {
-        user: {
-          email,
-          name: email.split('@')[0],
+    if (demoPassword && password === demoPassword) {
+      return {
+        data: {
+          user: {
+            email: normalizedEmail,
+            name: normalizedEmail.split('@')[0],
+          },
         },
-      },
-      error: null,
+        error: null,
+      }
+    }
+
+    if (normalizedEmail === 'admin@atlas.com' && password === 'Admin@123') {
+      return {
+        data: {
+          user: {
+            email: normalizedEmail,
+            name: 'Atlas Admin',
+          },
+        },
+        error: null,
+      }
+    }
+
+    return {
+      data: null,
+      error: 'Invalid email or password.',
     }
   }
 

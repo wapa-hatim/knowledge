@@ -14,7 +14,7 @@ export function KnowledgeTable({ articles, role, title, description, compact = f
   const [sortBy, setSortBy] = useState('recent')
   const spaces = [...new Set(articles.map((article) => article.space))].sort()
   const filteredArticles = articles.filter((article) =>
-    (filter !== 'mine' || article.owner === 'Amina Yusuf') &&
+    (filter !== 'mine' || article.owner === 'Atlas Admin') &&
     (filter !== 'review' || article.status === 'Under review') &&
     (statusFilter === 'All statuses' || article.status === statusFilter) &&
     (spaceFilter === 'All spaces' || article.space === spaceFilter) &&

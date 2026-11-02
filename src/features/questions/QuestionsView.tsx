@@ -22,7 +22,7 @@ export function QuestionsView({ questions, role, initialSpace = 'Engineering', o
   const updateQuestion = (id: string, update: (question: KnowledgeQuestion) => KnowledgeQuestion) => onQuestionsChange(questions.map((question) => question.id === id ? update(question) : question))
   const submitQuestion = () => {
     if (!title.trim() || !body.trim()) return
-    const newQuestion: KnowledgeQuestion = { id: createQuestionId(), title: title.trim(), body: body.trim(), space, tags: [], author: 'Amina Yusuf', createdAt: 'Just now', votes: 0, answers: [] }
+    const newQuestion: KnowledgeQuestion = { id: createQuestionId(), title: title.trim(), body: body.trim(), space, tags: [], author: 'Atlas Admin', createdAt: 'Just now', votes: 0, answers: [] }
     onQuestionsChange([newQuestion, ...questions])
     setSelectedId(newQuestion.id)
     setAsking(false)
@@ -31,7 +31,7 @@ export function QuestionsView({ questions, role, initialSpace = 'Engineering', o
   }
   const submitAnswer = () => {
     if (!selectedQuestion || !answer.trim()) return
-    updateQuestion(selectedQuestion.id, (question) => ({ ...question, answers: [...question.answers, { id: createAnswerId(), author: 'Amina Yusuf', body: answer.trim(), votes: 0, verified: false }] }))
+    updateQuestion(selectedQuestion.id, (question) => ({ ...question, answers: [...question.answers, { id: createAnswerId(), author: 'Atlas Admin', body: answer.trim(), votes: 0, verified: false }] }))
     setAnswer('')
   }
 
