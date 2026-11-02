@@ -1,5 +1,5 @@
 export type Role = 'Super Admin' | 'Space Admin' | 'Author' | 'Reviewer' | 'Viewer'
-export type View = 'overview' | 'library' | 'models' | 'reviews' | 'questions' | 'analytics' | 'spaces' | 'people' | 'settings' | 'audit' | 'search' | 'article' | 'question'
+export type View = 'overview' | 'library' | 'models' | 'reviews' | 'questions' | 'analytics' | 'spaces' | 'people' | 'settings' | 'audit' | 'search' | 'article' | 'question' | 'help'
 export type ArticleStatus = 'Published' | 'Under review' | 'Draft' | 'Archived'
 export interface Article { id: string; title: string; summary: string; space: string; category: string; owner: string; updated: string; status: ArticleStatus; views: string; tags: string[]; initials: string; color: string; body?: string; reviewDue?: string; comments?: ArticleComment[]; versions?: ArticleVersion[] }
 
@@ -106,4 +106,5 @@ export interface KnowledgeIntegration {
 	category: 'Repository' | 'API catalog' | 'Operations'
 	connected: boolean
 	lastSynced: string
+	space?: string
 }

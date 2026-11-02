@@ -13,11 +13,11 @@ interface SpacesViewProps {
   onSelectSpace: (name: string | null) => void
   onCreateOpenChange: (open: boolean) => void
   onOpenArticle: (article: Article) => void
-  onCreateArticle: (space: string) => void
+  onAddKnowledge: (space: string) => void
   onCreateSpace: (space: KnowledgeSpace) => void
 }
 
-export function SpacesView({ spaces, articles, role, selectedSpaceName, createOpen, onSelectSpace, onCreateOpenChange, onOpenArticle, onCreateArticle, onCreateSpace }: SpacesViewProps) {
+export function SpacesView({ spaces, articles, role, selectedSpaceName, createOpen, onSelectSpace, onCreateOpenChange, onOpenArticle, onAddKnowledge, onCreateSpace }: SpacesViewProps) {
   const selectedSpace = spaces.find((space) => space.name === selectedSpaceName) ?? null
   const [selectedCategory, setSelectedCategory] = useState('All categories')
   const [query, setQuery] = useState('')
@@ -37,7 +37,7 @@ export function SpacesView({ spaces, articles, role, selectedSpaceName, createOp
 
   if (selectedSpace) return <section className="page-section spaces-page">
     <button className="back-action" type="button" onClick={() => { onSelectSpace(null); setSelectedCategory('All categories'); setQuery('') }}><ArrowLeft size={15} />All spaces</button>
-    <header className="space-detail-heading"><div className={`space-illustration space-${selectedSpace.color}`}><BookOpen size={23} /></div><div className="space-detail-copy"><div className="eyebrow">NORTHSTAR WORKSPACE / SPACES</div><h1>{selectedSpace.name}</h1><p>{selectedSpace.description}</p><div className="space-owner-line"><Users size={14} />Owned by {selectedSpace.owner}<i />{selectedSpace.articleCount} articles</div></div>{role !== 'Viewer' && <Button onClick={() => onCreateArticle(selectedSpace.name)}><Plus size={15} />New article</Button>}</header>
+    <header className="space-detail-heading"><div className={`space-illustration space-${selectedSpace.color}`}><BookOpen size={23} /></div><div className="space-detail-copy"><div className="eyebrow">NORTHSTAR WORKSPACE / SPACES</div><h1>{selectedSpace.name}</h1><p>{selectedSpace.description}</p><div className="space-owner-line"><Users size={14} />Owned by {selectedSpace.owner}<i />{selectedSpace.articleCount} articles</div></div>{role !== 'Viewer' && <Button onClick={() => onAddKnowledge(selectedSpace.name)}><Plus size={15} />Add knowledge</Button>}</header>
     {selectedSpace.children?.length ? <div className="nested-area-section"><div className="section-title-row"><div><h2>Nested areas</h2><p>Browse focused collections within {selectedSpace.name}.</p></div></div><div className="nested-area-list">{selectedSpace.children.map((child) => <button key={child} type="button" onClick={() => setQuery(child)}><span className="nested-area-icon"><BookOpen size={15} /></span><strong>{child}</strong><ArrowRight size={14} /></button>)}</div></div> : null}
     <div className="space-content-heading"><div><h2>Knowledge in {selectedSpace.name}</h2><p>{spaceArticles.length} matching articles</p></div><label className="table-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this space" /></label></div>
     <div className="space-category-tabs"><button className={selectedCategory === 'All categories' ? 'selected' : ''} type="button" onClick={() => setSelectedCategory('All categories')}>All categories</button>{selectedSpace.categories.map((category) => <button className={selectedCategory === category ? 'selected' : ''} key={category} type="button" onClick={() => setSelectedCategory(category)}>{category}</button>)}</div>

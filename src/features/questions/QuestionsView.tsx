@@ -7,15 +7,15 @@ import '../spaces/workspace-pages.css'
 const createQuestionId = () => `Q-${Date.now().toString().slice(-3)}`
 const createAnswerId = () => `A-${Date.now()}`
 
-interface QuestionsViewProps { questions: KnowledgeQuestion[]; role: Role; onQuestionsChange: (questions: KnowledgeQuestion[]) => void }
+interface QuestionsViewProps { questions: KnowledgeQuestion[]; role: Role; initialSpace?: string; onQuestionsChange: (questions: KnowledgeQuestion[]) => void }
 
-export function QuestionsView({ questions, role, onQuestionsChange }: QuestionsViewProps) {
+export function QuestionsView({ questions, role, initialSpace = 'Engineering', onQuestionsChange }: QuestionsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [answer, setAnswer] = useState('')
-  const [space, setSpace] = useState('Engineering')
+  const [space, setSpace] = useState(initialSpace)
   const selectedQuestion = questions.find((question) => question.id === selectedId)
   const canVerify = role === 'Super Admin' || role === 'Space Admin' || role === 'Reviewer'
 

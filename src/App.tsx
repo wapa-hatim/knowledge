@@ -1,5 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
-import { AlertCircle, FileText, Search } from 'lucide-react'
+import { lazy, Suspense, useMemo, useState, type FormEvent } from 'react'
+import { AlertCircle, BookOpenText, FileText, Search } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
@@ -13,6 +13,8 @@ import { initialAuditEvents, initialQuestions, initialSpaces, initialUsers } fro
 import { initialKnowledgeAssets, initialKnowledgeIntegrations, initialKnowledgeModels, initialTaxonomyTerms } from './data/knowledgeModels'
 import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
+import { Button } from './components/ui/Button'
+import HelpCenter from './features/help/HelpCenter'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -22,11 +24,11 @@ const QuestionsView = lazy(() => import('./features/questions/QuestionsView').th
 const AdminView = lazy(() => import('./features/admin/AdminView').then((module) => ({ default: module.AdminView })))
 
 const roleViews: Record<Role, View[]> = {
-  'Super Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'audit', 'search', 'article', 'question'],
-  'Space Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'search', 'article', 'question'],
-  Author: ['overview', 'library', 'models', 'questions', 'spaces', 'search', 'article', 'question'],
-  Reviewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question'],
-  Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question'],
+  'Super Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'audit', 'search', 'article', 'question', 'help'],
+  'Space Admin': ['overview', 'library', 'models', 'reviews', 'questions', 'analytics', 'spaces', 'people', 'settings', 'search', 'article', 'question', 'help'],
+  Author: ['overview', 'library', 'models', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
+  Reviewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
+  Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
 }
 
 const storedArticles = initialArticles.map((article) => ({ ...article, body: articleBodies[article.id] ?? `# ${article.title}\n\n${article.summary}`, reviewDue: 'January 19, 2027' }))
@@ -38,6 +40,7 @@ const formatTimestamp = () => new Date().toLocaleString()
 function App() {
   const [role, setRole] = useState<Role>('Super Admin')
   const [activeView, setActiveView] = useState<View>('overview')
+  const [isLoggedOut, setIsLoggedOut] = useState(false)
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isAddKnowledgeOpen, setIsAddKnowledgeOpen] = useState(false)
@@ -59,6 +62,7 @@ function App() {
   const [knowledgeIntegrations, setKnowledgeIntegrations] = usePersistentState<KnowledgeIntegration[]>('atlas-integrations', initialKnowledgeIntegrations)
   const [taxonomyTerms, setTaxonomyTerms] = usePersistentState<string[]>('atlas-taxonomy', initialTaxonomyTerms)
   const selectedArticle = articles.find((article) => article.id === selectedArticleId)
+  const knowledgeSpaceContext = selectedSpaceName ?? createSpace ?? 'Engineering'
   const visibleArticles = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return articles
@@ -76,7 +80,7 @@ function App() {
     setActiveView('library')
   }
   const handleKnowledgeAction = (action: KnowledgeAction) => {
-    if (action === 'article') openCreateForSpace('Engineering')
+    if (action === 'article') openCreateForSpace(knowledgeSpaceContext)
     if (action === 'asset') setIsAssetOpen(true)
     if (action === 'metadata' || action === 'ai-context') setActiveView('models')
     if (action === 'question') setActiveView('questions')
@@ -159,11 +163,17 @@ function App() {
   const saveZeroResult = (query: string) => {
     setZeroResultQueries((current) => current.includes(query) ? current : [query, ...current])
   }
+  const submitLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsLoggedOut(false)
+  }
+
+  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in to return to your workspace. This demo does not authenticate credentials.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="you@company.com" required /><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" placeholder="Enter your password" required /><Button type="submit">Sign in</Button></form></main>
 
   return <div className="app-shell">
     <Sidebar activeView={activeView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} activeView={activeView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} />
+      <Topbar role={role} activeView={activeView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={() => setIsLoggedOut(true)} />
       <main className="page-content"><Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {activeView === 'overview' && <Dashboard role={role} articles={visibleArticles} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {activeView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
@@ -171,8 +181,9 @@ function App() {
         {activeView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace('Engineering')} onOpenArticle={openArticle} />}
         {activeView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {activeView === 'article' && selectedArticle && <ArticleDetail article={selectedArticle} role={role} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => setBookmarks((current) => current.includes(selectedArticle.id) ? current.filter((id) => id !== selectedArticle.id) : [...current, selectedArticle.id])} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onRestoreVersion={restoreArticleVersion} />}
-        {activeView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onCreateArticle={openCreateForSpace} onCreateSpace={createSpaceItem} />}
-        {activeView === 'questions' && <QuestionsView questions={questions} role={role} onQuestionsChange={setQuestions} />}
+        {activeView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onCreateSpace={createSpaceItem} />}
+        {activeView === 'questions' && <QuestionsView questions={questions} role={role} initialSpace={knowledgeSpaceContext} onQuestionsChange={setQuestions} />}
+        {activeView === 'help' && <HelpCenter onNavigate={setActiveView} />}
         {activeView === 'analytics' && <AnalyticsView articles={articles} zeroResultQueries={zeroResultQueries} />}
         {activeView === 'people' && <AdminView mode="people" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
         {activeView === 'settings' && <AdminView mode="settings" users={users} events={auditEvents} settings={settings} onSettingsChange={setSettings} onInvite={inviteUser} onUpdateUser={updateUser} />}
@@ -181,8 +192,8 @@ function App() {
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Amina Yusuf" initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} />
-    <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} />
-    <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} />
+    <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
+    <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
   </div>
 }
 

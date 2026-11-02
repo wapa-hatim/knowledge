@@ -42,6 +42,124 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.topbar-actions {
+  position: relative;
+}
+
+.account-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 3px 7px 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #43564c;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color .16s ease, border-color .16s ease;
+}
+
+.account-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.account-trigger:hover,
+.account-menu[open] .account-trigger {
+  border-color: #e7ece8;
+  background-color: #f7faf8;
+}
+
+.account-avatar {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 1px solid #d5e7db;
+  border-radius: 50%;
+  color: #3d7158;
+  background: #eaf3eb;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.account-trigger-name {
+  color: #45574d;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.account-trigger > svg {
+  color: #8b9991;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: 218px;
+  padding: 14px;
+  border: 1px solid #e5ebe7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px #213c3020;
+  animation: rise-in .16s ease both;
+}
+
+.account-menu-panel strong {
+  color: #30453a;
+  font-size: 12px;
+}
+
+.account-menu-panel > span {
+  margin-top: 3px;
+  color: #839087;
+  font-size: 10px;
+}
+
+.account-menu-panel button {
+  margin-top: 12px;
+  padding: 9px 2px 0;
+  border: 0;
+  border-top: 1px solid #edf1ed;
+  color: #a64b45;
+  text-align: left;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.account-menu-panel button:hover {
+  color: #80342f;
+}
+
+.logout-dialog {
+  max-width: 420px;
+}
+
+.logout-dialog .dialog-heading {
+  margin-top: 4px;
+}
+
+@media (max-width: 650px) {
+  .account-trigger-name,
+  .account-trigger > svg {
+    display: none;
+  }
+
+  .account-trigger {
+    padding: 2px;
+  }
+}
+
 .metric-card:has(.tone-mint) {
   border-color: color-mix(in srgb, #c5dfcc 60%, transparent);
   background-color: color-mix(in srgb, #e9f4ed 58%, transparent);

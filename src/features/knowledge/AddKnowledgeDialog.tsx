@@ -6,7 +6,8 @@ export type KnowledgeAction = 'article' | 'asset' | 'metadata' | 'question' | 's
 interface AddKnowledgeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSelect: (action: KnowledgeAction) => void
+  onSelect: (action: KnowledgeAction, space?: string) => void
+  space?: string | null
 }
 
 const options: { action: KnowledgeAction; title: string; description: string; icon: typeof BookOpenText; tone: string }[] = [
@@ -18,10 +19,10 @@ const options: { action: KnowledgeAction; title: string; description: string; ic
   { action: 'ai-context', title: 'Improve AI discovery', description: 'Review indexed coverage and retrieval context for answers.', icon: SearchCheck, tone: 'tone-mint' },
 ]
 
-export function AddKnowledgeDialog({ open, onOpenChange, onSelect }: AddKnowledgeDialogProps) {
+export function AddKnowledgeDialog({ open, onOpenChange, onSelect, space }: AddKnowledgeDialogProps) {
   const choose = (action: KnowledgeAction) => {
     onOpenChange(false)
-    onSelect(action)
+    onSelect(action, space ?? undefined)
   }
 
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -29,7 +30,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSelect }: AddKnowledg
       <Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="create-dialog add-knowledge-dialog">
         <div className="dialog-topline"><div className="dialog-icon"><Sparkles size={19} /></div><Dialog.Close asChild><button className="dialog-close" type="button" aria-label="Close"><X size={17} /></button></Dialog.Close></div>
-        <div className="dialog-heading"><Dialog.Title>Add knowledge</Dialog.Title><Dialog.Description>Choose the format that best captures what your team knows.</Dialog.Description></div>
+        <div className="dialog-heading"><Dialog.Title>Add knowledge</Dialog.Title><Dialog.Description>{space ? `Choose a format to add to ${space}.` : 'Choose the format that best captures what your team knows.'}</Dialog.Description></div>
         <div className="knowledge-action-grid">
           {options.map(({ action, title, description, icon: Icon, tone }) => <button className="knowledge-action-option" type="button" key={action} onClick={() => choose(action)}>
             <span className={`knowledge-action-icon ${tone}`}><Icon size={17} /></span>
