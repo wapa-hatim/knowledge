@@ -153,15 +153,6 @@ function App() {
     setSelectedArticleId(article.id)
     setActiveView('article')
   }
-  const changeRole = (nextRole: Role) => {
-    setRole(nextRole)
-    if (!roleViews[nextRole].includes(activeView)) setActiveView('overview')
-    if (typeof window !== 'undefined') {
-      const nextUrl = new URL(window.location.href)
-      nextUrl.searchParams.set('auth', 'workspace')
-      window.history.replaceState({}, '', nextUrl)
-    }
-  }
   const updateArticle = (id: string, update: (article: Article) => Article) => setArticles((current) => current.map((article) => article.id === id ? update(article) : article))
   const autosaveArticle = (body: string) => {
     if (selectedArticle) updateArticle(selectedArticle.id, (article) => ({ ...article, body, updated: 'Just now' }))
@@ -258,7 +249,7 @@ function App() {
   return <div className="app-shell">
     <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} activeView={effectiveView} onRoleChange={changeRole} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
+      <Topbar role={role} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
         const { error } = await signOut()
         if (error) setResetNotice(error)
         setIsLoggedOut(true)

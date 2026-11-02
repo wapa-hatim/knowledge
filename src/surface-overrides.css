@@ -46,6 +46,28 @@ select {
   position: relative;
 }
 
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 31px;
+  padding: 0 9px;
+  border: 1px solid #e6ece8;
+  border-radius: 6px;
+  color: #53665b;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #68a27a;
+}
+
 .account-menu {
   position: relative;
   flex: 0 0 auto;
@@ -153,6 +175,15 @@ select {
   .account-trigger-name,
   .account-trigger > svg {
     display: none;
+  }
+
+  .role-badge {
+    min-height: 28px;
+    max-width: 110px;
+    padding: 0 6px;
+    overflow: hidden;
+    font-size: 8px;
+    text-overflow: ellipsis;
   }
 
   .account-trigger {
