@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState, type FormEvent } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { AlertCircle, BookOpenText, FileText, Search } from 'lucide-react'
 import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
@@ -15,6 +16,7 @@ import { usePersistentState } from './hooks/usePersistentState'
 import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import HelpCenter from './features/help/HelpCenter'
+import { resetPassword, signInWithEmail } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -50,6 +52,9 @@ function App() {
   const [createSpace, setCreateSpace] = useState('Engineering')
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
+  const [passwordResetOpen, setPasswordResetOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState('hello@northstar.studio')
+  const [resetNotice, setResetNotice] = useState('')
   const [articles, setArticles] = usePersistentState<Article[]>('atlas-articles', storedArticles)
   const [questions, setQuestions] = usePersistentState<KnowledgeQuestion[]>('atlas-questions', initialQuestions)
   const [spaces, setSpaces] = usePersistentState<KnowledgeSpace[]>('atlas-spaces', initialSpaces)
@@ -163,12 +168,31 @@ function App() {
   const saveZeroResult = (query: string) => {
     setZeroResultQueries((current) => current.includes(query) ? current : [query, ...current])
   }
-  const submitLogin = (event: FormEvent<HTMLFormElement>) => {
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const form = event.currentTarget
+    const emailInput = form.querySelector('#login-email') as HTMLInputElement | null
+    const passwordInput = form.querySelector('#login-password') as HTMLInputElement | null
+    const email = emailInput?.value ?? ''
+    const password = passwordInput?.value ?? ''
+    const { error } = await signInWithEmail(email, password)
+    if (error) {
+      setResetNotice(error)
+      return
+    }
+    setResetNotice('')
     setIsLoggedOut(false)
   }
+  const requestPasswordReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!resetEmail.trim()) return
+    const { error } = await resetPassword(resetEmail.trim())
+    setResetNotice(error ?? `Password reset link sent to ${resetEmail.trim()}.`)
+    setPasswordResetOpen(false)
+    setResetEmail('hello@northstar.studio')
+  }
 
-  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in to return to your workspace. This demo does not authenticate credentials.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="you@company.com" required /><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" placeholder="Enter your password" required /><Button type="submit">Sign in</Button></form></main>
+  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in to return to your workspace. This demo stores access in browser state and can be wired to Supabase auth.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="you@company.com" required /><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" placeholder="Enter your password" required /><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)}>Forgot password?</button></div><Button type="submit">Sign in</Button>{resetNotice && <span className="auth-reset-note">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="you@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
     <Sidebar activeView={activeView} onNavigate={setActiveView} role={role} spaces={spaces} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
@@ -191,7 +215,7 @@ function App() {
       </Suspense></main>
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author="Amina Yusuf" initialSpace={createSpace} />
-    <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} />
+    <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
   </div>
