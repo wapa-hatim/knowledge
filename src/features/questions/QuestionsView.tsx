@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ArrowLeft, ArrowUp, Check, MessageSquareText, Plus, Send, Sparkles } from 'lucide-react'
 import type { KnowledgeQuestion, Role } from '../../types'
 import { Button } from '../../components/ui/Button'
@@ -13,17 +13,14 @@ export function QuestionsView({ questions, spaces, role, currentUserName, initia
   const [body, setBody] = useState('')
   const [answer, setAnswer] = useState('')
   const [space, setSpace] = useState(initialSpace)
+  const activeSpace = spaces.some((item) => item.name === space) ? space : spaces.some((item) => item.name === initialSpace) ? initialSpace : spaces[0]?.name ?? ''
   const selectedQuestion = questions.find((question) => question.id === selectedId)
   const canVerify = role === 'Super Admin' || role === 'Space Admin' || role === 'Reviewer'
 
-  useEffect(() => {
-    if (!spaces.some((item) => item.name === space)) setSpace(initialSpace || spaces[0]?.name || '')
-  }, [initialSpace, space, spaces])
-
   const updateQuestion = (id: string, update: (question: KnowledgeQuestion) => KnowledgeQuestion) => onQuestionsChange(questions.map((question) => question.id === id ? update(question) : question))
   const submitQuestion = async () => {
-    if (!title.trim() || !body.trim() || !space) return
-    const newQuestion: KnowledgeQuestion = { id: crypto.randomUUID(), title: title.trim(), body: body.trim(), space, tags: [], author: currentUserName, createdAt: 'Just now', votes: 0, answers: [] }
+    if (!title.trim() || !body.trim() || !activeSpace) return
+    const newQuestion: KnowledgeQuestion = { id: crypto.randomUUID(), title: title.trim(), body: body.trim(), space: activeSpace, tags: [], author: currentUserName, createdAt: 'Just now', votes: 0, answers: [] }
     const savedQuestions = await onQuestionsChange([newQuestion, ...questions])
     if (!savedQuestions) return
     setSelectedId(newQuestion.id)
@@ -45,6 +42,6 @@ export function QuestionsView({ questions, spaces, role, currentUserName, initia
     <div className="page-heading"><div><div className="eyebrow">KNOWLEDGE EXCHANGE</div><h1>Questions & answers</h1><p>Find a verified answer or help someone else move forward.</p></div><Button onClick={() => setAsking(true)} disabled={!spaces.length}><Plus size={15} />Ask a question</Button></div>
     <div className="question-list">{questions.map((question) => <button className="question-row question-list-button" type="button" key={question.id} onClick={() => { setSelectedId(question.id); setAsking(false) }}><span className="question-votes"><strong>{question.votes}</strong><span>votes</span></span><span className="question-copy"><strong>{question.title}</strong><small>{question.space} <i /> {question.answers.length} answers <i /> asked {question.createdAt.toLowerCase()}</small></span><span className={`status-pill${question.acceptedAnswerId ? ' status-published' : question.answers.length ? ' status-under-review' : ' status-open'}`}>{question.acceptedAnswerId ? 'Solved' : question.answers.length ? 'Answered' : 'Open'}</span><MessageSquareText size={16} /></button>)}</div>
     {questions.length === 0 && <div className="search-empty"><Sparkles size={20} /><h2>No questions yet</h2><p>Start the conversation and share what your team needs to know.</p></div>}
-    {asking && <div className="question-form panel"><div className="panel-heading"><div><h2>Ask your team</h2><p>Add enough context to get a useful answer.</p></div><button type="button" onClick={() => setAsking(false)} aria-label="Close question form">×</button></div><label>Question title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What do you need help with?" /></label><label>Details<textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Share what you have tried and any helpful context." /></label><label>Space<select value={space} onChange={(event) => setSpace(event.target.value)} required><option value="" disabled>Select a space</option>{spaces.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="question-form-actions"><Button variant="ghost" type="button" onClick={() => setAsking(false)}>Cancel</Button><Button type="button" onClick={submitQuestion} disabled={!spaces.length}><Plus size={14} />Post question</Button></div></div>}
+    {asking && <div className="question-form panel"><div className="panel-heading"><div><h2>Ask your team</h2><p>Add enough context to get a useful answer.</p></div><button type="button" onClick={() => setAsking(false)} aria-label="Close question form">×</button></div><label>Question title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What do you need help with?" /></label><label>Details<textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Share what you have tried and any helpful context." /></label><label>Space<select value={activeSpace} onChange={(event) => setSpace(event.target.value)} required><option value="" disabled>Select a space</option>{spaces.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="question-form-actions"><Button variant="ghost" type="button" onClick={() => setAsking(false)}>Cancel</Button><Button type="button" onClick={submitQuestion} disabled={!spaces.length}><Plus size={14} />Post question</Button></div></div>}
   </section>
 }

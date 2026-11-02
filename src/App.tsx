@@ -127,7 +127,7 @@ function App() {
           setSettings(workspaceData?.settings ?? defaultSettings)
           setWorkspaceDataError(workspaceError)
           setWorkspaceDataLoading(false)
-          if (workspaceData?.spaces[0] && !createSpace) setCreateSpace(workspaceData.spaces[0].name)
+          if (workspaceData?.spaces[0]) setCreateSpace((current) => current || workspaceData.spaces[0].name)
         }
         if (nextRole === 'Super Admin') {
           setAdminDataLoading(true)
