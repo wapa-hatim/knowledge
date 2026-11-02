@@ -92,7 +92,7 @@ export async function loadWorkspaceData(role: Role) {
     supabase.from('bookmarks').select('article_id').eq('user_id', authData.user.id),
     supabase.from('workspace_settings').select('key, value'),
     searchQueriesQuery,
-    supabase.from('profiles').select('id, display_name'),
+    supabase.rpc('get_workspace_member_directory'),
     supabase.rpc('get_workspace_vote_counts'),
     supabase.from('question_votes').select('question_id').eq('user_id', authData.user.id),
     supabase.from('answer_votes').select('answer_id').eq('user_id', authData.user.id),
@@ -257,7 +257,7 @@ export async function loadCoreWorkspaceData(userId: string) {
     supabase.from('categories').select('id, space_id, name, parent_id').order('name'),
     supabase.from('articles').select('id, space_id, category_id, title, summary, status, owner_id, author_id, tags, view_count, review_due_at, updated_at').order('updated_at', { ascending: false }).limit(1000),
     supabase.from('bookmarks').select('article_id').eq('user_id', userId),
-    supabase.from('profiles').select('id, display_name'),
+    supabase.rpc('get_workspace_member_directory'),
     supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(5),
   ])
   const error = spacesResult.error ?? categoriesResult.error ?? articlesResult.error ?? bookmarksResult.error ?? profilesResult.error ?? eventsResult.error
@@ -334,7 +334,7 @@ export async function loadArticleDetails(articleId: string) {
     supabase.from('articles').select('body').eq('id', articleId).single(),
     supabase.from('article_comments').select('id, author_id, body, created_at').eq('article_id', articleId).order('created_at'),
     supabase.from('article_versions').select('id, title, body, status, author_id, created_at').eq('article_id', articleId).order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id, display_name'),
+    supabase.rpc('get_workspace_member_directory'),
   ])
   const error = articleResult.error ?? commentsResult.error ?? versionsResult.error ?? profilesResult.error
   if (error) return { data: null, error: error.message }
@@ -360,7 +360,7 @@ export async function loadQuestionData() {
     supabase.rpc('get_workspace_vote_counts'),
     supabase.from('question_votes').select('question_id').eq('user_id', authData.user.id),
     supabase.from('answer_votes').select('answer_id').eq('user_id', authData.user.id),
-    supabase.from('profiles').select('id, display_name'),
+    supabase.rpc('get_workspace_member_directory'),
   ])
   const error = spacesResult.error ?? questionsResult.error ?? answersResult.error ?? voteCountsResult.error ?? questionVotesResult.error ?? answerVotesResult.error ?? profilesResult.error
   if (error) return { data: null, error: error.message }
@@ -399,7 +399,7 @@ export async function loadQuestionData() {
 
 export async function loadKnowledgeHubData(role: Role) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
-  const ownerProfiles = supabase.from('profiles').select('id, display_name')
+  const ownerProfiles = supabase.rpc('get_workspace_member_directory')
   const integrations = role === 'Super Admin' || role === 'Space Admin'
     ? supabase.from('knowledge_integrations').select('id, name, description, category, connected, last_synced_at').order('created_at', { ascending: false })
     : Promise.resolve({ data: [], error: null })
@@ -726,7 +726,7 @@ export async function loadWorkspaceAdminData(mode: 'people' | 'audit' = 'people'
   if (mode === 'audit') {
     const [eventsResult, profilesResult] = await Promise.all([
       supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(200),
-      supabase.from('profiles').select('id, display_name'),
+      supabase.rpc('get_workspace_member_directory'),
     ])
     const error = eventsResult.error ?? profilesResult.error
     if (error) return { data: null, error: error.message }
