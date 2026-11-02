@@ -57,8 +57,8 @@ Deno.serve(async (request) => {
   const { data: authData, error: authError } = await sessionClient.auth.getUser()
   if (authError || !authData.user) return response({ error: 'Your session is invalid or expired.' }, 401)
 
-  const { data: actor, error: actorError } = await admin.from('profiles').select('role').eq('id', authData.user.id).single()
-  if (actorError || actor?.role !== 'Super Admin') return response({ error: 'Only a Super Admin can manage workspace users.' }, 403)
+  const { data: actor, error: actorError } = await admin.from('profiles').select('role, status').eq('id', authData.user.id).single()
+  if (actorError || actor?.role !== 'Super Admin' || actor.status !== 'Active') return response({ error: 'Only an active Super Admin can manage workspace users.' }, 403)
 
   let input: { action?: string; member?: MemberInput; userId?: string; status?: string }
   try {
@@ -200,6 +200,21 @@ Deno.serve(async (request) => {
     if (userId === authData.user.id) return response({ error: 'You cannot delete your own account.' }, 400)
     const { data: target, error: targetError } = await admin.from('profiles').select('email, display_name').eq('id', userId).single()
     if (targetError || !target) return response({ error: targetError?.message ?? 'Member not found.' }, 404)
+
+    const dependentRecords = await Promise.all([
+      admin.from('articles').select('id').eq('author_id', userId).limit(1),
+      admin.from('article_versions').select('id').eq('author_id', userId).limit(1),
+      admin.from('article_comments').select('id').eq('author_id', userId).limit(1),
+      admin.from('knowledge_questions').select('id').eq('author_id', userId).limit(1),
+      admin.from('question_answers').select('id').eq('author_id', userId).limit(1),
+      admin.from('knowledge_assets').select('id').eq('uploaded_by', userId).limit(1),
+    ])
+    const dependencyError = dependentRecords.find((result) => result.error)?.error
+    if (dependencyError) return response({ error: dependencyError.message }, 500)
+    if (dependentRecords.some((result) => result.data?.length)) {
+      return response({ error: 'This member owns content that must be retained. Suspend the account instead of deleting it.' }, 409)
+    }
+
     const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
     if (deleteError) return response({ error: deleteError.message }, 500)
     const auditError = await writeAudit(admin, authData.user.id, 'Removed member', userId, `${target.display_name} (${target.email})`)

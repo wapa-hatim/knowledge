@@ -364,7 +364,16 @@ export async function saveSpaceRecord(previousName: string | null, space: Knowle
 
 export async function deleteSpaceRecord(name: string) {
   if (!supabase) return { error: 'Supabase is not configured.' }
-  const { error } = await supabase.from('spaces').delete().eq('name', name)
+  const { data: space, error: spaceError } = await supabase.from('spaces').select('id').eq('name', name).single()
+  if (spaceError || !space) return { error: spaceError?.message ?? 'Space not found.' }
+  const { data: assets, error: assetsError } = await supabase.from('knowledge_assets').select('storage_path').eq('space_id', space.id)
+  if (assetsError) return { error: assetsError.message }
+  const storagePaths = (assets ?? []).map((asset) => asset.storage_path)
+  if (storagePaths.length) {
+    const { error: storageError } = await supabase.storage.from(supabaseBucket).remove(storagePaths)
+    if (storageError) return { error: storageError.message }
+  }
+  const { error } = await supabase.from('spaces').delete().eq('id', space.id)
   return { error: error?.message ?? null }
 }
 
@@ -550,7 +559,9 @@ export async function loadWorkspaceAdminData() {
     department: profile.department,
     role: profile.role as WorkspaceUser['role'],
     status: profile.status as WorkspaceUser['status'],
-    space: membershipsByUser.get(profile.id)?.[0] ?? 'All spaces',
+    space: profile.role === 'Super Admin' || (spacesById.size > 0 && (membershipsByUser.get(profile.id)?.length ?? 0) >= spacesById.size)
+      ? 'All spaces'
+      : membershipsByUser.get(profile.id)?.[0] ?? 'All spaces',
   }))
 
   const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => {
