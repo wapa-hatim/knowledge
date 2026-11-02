@@ -720,17 +720,35 @@ export async function recordAuditEvent(action: string, target: string, type: Aud
   }
 }
 
-export async function loadWorkspaceAdminData() {
+export async function loadWorkspaceAdminData(mode: 'people' | 'audit' = 'people') {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
 
-  const [profilesResult, membershipsResult, spacesResult, eventsResult] = await Promise.all([
+  if (mode === 'audit') {
+    const [eventsResult, profilesResult] = await Promise.all([
+      supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(200),
+      supabase.from('profiles').select('id, display_name'),
+    ])
+    const error = eventsResult.error ?? profilesResult.error
+    if (error) return { data: null, error: error.message }
+    const profilesById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name]))
+    const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => ({
+      id: event.id,
+      actor: event.actor_id ? profilesById.get(event.actor_id) || 'Workspace member' : 'System',
+      action: event.action,
+      target: (event.details as { target?: string } | null)?.target || event.target_id,
+      date: new Date(event.created_at).toLocaleString(),
+      type: (event.target_type === 'Content' || event.target_type === 'Access' ? event.target_type : 'Workspace') as AuditEvent['type'],
+    }))
+    return { data: { users: [], events, spaces: [] } satisfies WorkspaceAdminData, error: null }
+  }
+
+  const [profilesResult, membershipsResult, spacesResult] = await Promise.all([
     supabase.from('profiles').select('id, email, display_name, department, role, status').order('display_name'),
-    supabase.from('space_members').select('user_id, space_id, created_at').order('created_at'),
+    supabase.from('space_members').select('user_id, space_id').order('created_at'),
     supabase.from('spaces').select('id, name').order('name'),
-    supabase.from('audit_events').select('id, actor_id, action, target_type, target_id, details, created_at').order('created_at', { ascending: false }).limit(200),
   ])
 
-  const queryError = profilesResult.error ?? membershipsResult.error ?? spacesResult.error ?? eventsResult.error
+  const queryError = profilesResult.error ?? membershipsResult.error ?? spacesResult.error
   if (queryError) return { data: null, error: queryError.message }
 
   const spacesById = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
@@ -754,20 +772,7 @@ export async function loadWorkspaceAdminData() {
       : membershipsByUser.get(profile.id)?.[0] ?? 'All spaces',
   }))
 
-  const events: AuditEvent[] = (eventsResult.data ?? []).map((event) => {
-    const details = event.details as { target?: string } | null
-    const eventType = event.target_type === 'Content' || event.target_type === 'Access' ? event.target_type : 'Workspace'
-    return {
-      id: event.id,
-      actor: event.actor_id ? profilesById.get(event.actor_id)?.display_name || 'Workspace member' : 'System',
-      action: event.action,
-      target: details?.target || event.target_id,
-      date: new Date(event.created_at).toLocaleString(),
-      type: eventType,
-    }
-  })
-
-  return { data: { users, events, spaces: (spacesResult.data ?? []).map((space) => space.name) } satisfies WorkspaceAdminData, error: null }
+  return { data: { users, events: [], spaces: (spacesResult.data ?? []).map((space) => space.name) } satisfies WorkspaceAdminData, error: null }
 }
 
 export async function manageWorkspaceUser(
