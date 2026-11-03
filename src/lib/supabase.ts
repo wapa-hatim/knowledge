@@ -602,9 +602,17 @@ export async function saveQuestionChanges(previous: KnowledgeQuestion[], next: K
       tags: question.tags,
       accepted_answer_id: question.acceptedAnswerId ?? null,
     }
-    const questionResult = previousQuestion
-      ? await supabase.from('knowledge_questions').update(questionRecord).eq('id', question.id)
-      : await supabase.from('knowledge_questions').insert({ ...questionRecord, id: question.id, author_id: userId })
+    const questionChanged = previousQuestion && (
+      previousQuestion.title !== question.title ||
+      previousQuestion.body !== question.body ||
+      JSON.stringify(previousQuestion.tags) !== JSON.stringify(question.tags) ||
+      previousQuestion.acceptedAnswerId !== question.acceptedAnswerId
+    )
+    const questionResult = !previousQuestion
+      ? await supabase.from('knowledge_questions').insert({ ...questionRecord, id: question.id, author_id: userId })
+      : questionChanged
+        ? await supabase.from('knowledge_questions').update(questionRecord).eq('id', question.id)
+        : { error: null }
     if (questionResult.error) return { error: questionResult.error.message }
 
     if (previousQuestion && question.votedByMe !== previousQuestion.votedByMe) {
