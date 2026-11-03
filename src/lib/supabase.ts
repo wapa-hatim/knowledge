@@ -785,7 +785,14 @@ export async function manageWorkspaceUser(
 ) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
   const { data, error } = await supabase.functions.invoke('manage-workspace-user', { body: { action, ...payload } })
-  return { data, error: error?.message ?? null }
+  if (!error) return { data, error: null }
+  const cannotReachFunction = error.name === 'FunctionsFetchError' || error.message.includes('Failed to send a request')
+  return {
+    data: null,
+    error: cannotReachFunction
+      ? 'Could not reach the manage-workspace-user Edge Function. Deploy it to the Supabase project configured in VITE_SUPABASE_URL and check the function logs.'
+      : error.message,
+  }
 }
 
 export async function signInWithEmail(email: string, password: string) {

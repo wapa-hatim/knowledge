@@ -30,6 +30,34 @@ const roleViews: Record<Role, View[]> = {
   Viewer: ['overview', 'library', 'questions', 'spaces', 'search', 'article', 'question', 'help'],
 }
 
+const routePaths: Record<View, string> = {
+  overview: '/dashboard',
+  library: '/library',
+  models: '/models',
+  reviews: '/reviews',
+  questions: '/questions',
+  analytics: '/analytics',
+  spaces: '/spaces',
+  people: '/people',
+  settings: '/settings',
+  audit: '/audit',
+  search: '/search',
+  article: '/articles',
+  question: '/questions',
+  help: '/help',
+}
+
+function resolveAppPath(pathname: string) {
+  const path = pathname.replace(/\/+$/, '') || '/'
+  if (path === '/') return { view: 'overview' as View, articleId: null, isLogin: true, isValid: true }
+
+  const articleMatch = path.match(/^\/articles\/([^/]+)$/)
+  if (articleMatch) return { view: 'article' as View, articleId: decodeURIComponent(articleMatch[1]), isLogin: false, isValid: true }
+
+  const view = (Object.entries(routePaths).find(([key, route]) => key !== 'article' && key !== 'question' && route === path)?.[0] ?? null) as View | null
+  return { view: view ?? 'overview', articleId: null, isLogin: false, isValid: view !== null }
+}
+
 const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadenceMonths: 6, notifyOwners: true, allowGuestQuestions: true, defaultArticleVisibility: 'Space members' }
 const formatTimestamp = () => new Date().toLocaleString()
 const resolveRoleFromMetadata = (role: unknown): Role => {
@@ -58,7 +86,7 @@ function App() {
   const [role, setRole] = useState<Role>('Viewer')
   const [currentUserName, setCurrentUserName] = useState('')
   const [authUserId, setAuthUserId] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<View>('overview')
+  const [activeView, setActiveView] = useState<View>(() => resolveAppPath(window.location.pathname).view)
   const [isLoggedOut, setIsLoggedOut] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
@@ -71,7 +99,7 @@ function App() {
   const [isSpaceCreateOpen, setIsSpaceCreateOpen] = useState(false)
   const [createSpace, setCreateSpace] = useState('')
   const [selectedSpaceName, setSelectedSpaceName] = useState<string | null>(null)
-  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(() => resolveAppPath(window.location.pathname).articleId)
   const [passwordResetOpen, setPasswordResetOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetNotice, setResetNotice] = useState('')
@@ -111,6 +139,37 @@ function App() {
     return articles.filter((article) => [article.title, article.summary, article.body, article.space, article.category, article.owner, ...article.tags].join(' ').toLowerCase().includes(query))
   }, [articles, search])
 
+  const navigateToView = (view: View) => {
+    const destination = view === 'article' ? 'library' : view === 'question' ? 'questions' : view
+    window.history.pushState({}, '', routePaths[destination])
+    setSelectedArticleId(null)
+    setActiveView(destination)
+  }
+
+  useEffect(() => {
+    if (isAuthLoading) return
+    const syncRoute = () => {
+      const route = resolveAppPath(window.location.pathname)
+      if (isLoggedOut) {
+        if (window.location.pathname !== '/') window.history.replaceState({}, '', '/')
+        setActiveView('overview')
+        setSelectedArticleId(null)
+        return
+      }
+      if (route.isLogin || !route.isValid || !roleViews[role].includes(route.view)) {
+        window.history.replaceState({}, '', '/dashboard')
+        setActiveView('overview')
+        setSelectedArticleId(null)
+        return
+      }
+      setActiveView(route.view)
+      setSelectedArticleId(route.articleId)
+    }
+    syncRoute()
+    window.addEventListener('popstate', syncRoute)
+    return () => window.removeEventListener('popstate', syncRoute)
+  }, [isAuthLoading, isLoggedOut, role])
+
   useEffect(() => {
     const client = supabase
     if (!client) return
@@ -143,9 +202,9 @@ function App() {
       pendingSectionsRef.current.clear()
       setLoadedSections(new Set())
     }
-    const syncSession = async (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session'], forceLogin: boolean) => {
+    const syncSession = async (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session']) => {
       if (!isMountedRef.current) return
-      if (!session || forceLogin) {
+      if (!session) {
         activeUserIdRef.current = null
         clearWorkspace()
         setRole('Viewer')
@@ -195,8 +254,7 @@ function App() {
     }
 
     void client.auth.getSession().then(({ data }) => {
-      const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
-      return syncSession(data.session, forceLogin)
+      return syncSession(data.session)
     }).catch(() => {
       if (!isMountedRef.current) return
       setIsLoggedOut(true)
@@ -206,8 +264,7 @@ function App() {
 
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
       window.setTimeout(() => {
-        const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
-        void syncSession(session, forceLogin)
+        void syncSession(session)
       }, 0)
     })
 
@@ -341,14 +398,14 @@ function App() {
     setArticles((current) => [newArticle, ...current])
     setIsCreateOpen(false)
     addEvent(article.owner, 'Created draft', article.title, 'Content')
-    setActiveView('library')
+    navigateToView('library')
     return null
   }
   const handleKnowledgeAction = (action: KnowledgeAction) => {
     if (action === 'article') openCreateForSpace(knowledgeSpaceContext)
     if (action === 'asset') setIsAssetOpen(true)
-    if (action === 'metadata' || action === 'ai-context') setActiveView('models')
-    if (action === 'question') setActiveView('questions')
+    if (action === 'metadata' || action === 'ai-context') navigateToView('models')
+    if (action === 'question') navigateToView('questions')
     if (action === 'source') setIsSourceOpen(true)
   }
   const addKnowledgeAsset = async (asset: KnowledgeAsset, file: File) => {
@@ -357,7 +414,7 @@ function App() {
     setKnowledgeAssets((current) => [data, ...current])
     setIsAssetOpen(false)
     addEvent(currentUserName, 'Added knowledge asset', asset.name, 'Content')
-    setActiveView('models')
+    navigateToView('models')
     return null
   }
   const addKnowledgeIntegration = async (integration: KnowledgeIntegration) => {
@@ -369,7 +426,7 @@ function App() {
     setKnowledgeIntegrations((current) => [integration, ...current])
     setIsSourceOpen(false)
     addEvent(currentUserName, 'Added source connector', integration.name, 'Workspace')
-    setActiveView('models')
+    navigateToView('models')
     return null
   }
   const addTaxonomyTerm = async (term: string) => {
@@ -423,6 +480,7 @@ function App() {
   const openArticle = (article: Article) => {
     setSelectedArticleId(article.id)
     setActiveView('article')
+    window.history.pushState({}, '', `${routePaths.article}/${encodeURIComponent(article.id)}`)
   }
   const updateArticle = (id: string, update: (article: Article) => Article) => setArticles((current) => current.map((article) => article.id === id ? update(article) : article))
   const autosaveArticle = async (body: string) => {
@@ -500,7 +558,7 @@ function App() {
     }
     setArticles((current) => current.filter((article) => article.id !== selectedArticle.id))
     setSelectedArticleId(null)
-    setActiveView('library')
+    navigateToView('library')
     addEvent(currentUserName, 'Deleted article', selectedArticle.title, 'Content')
   }
   const updateUser = async (user: WorkspaceUser) => {
@@ -542,11 +600,11 @@ function App() {
   }
   const openSpace = (spaceName: string) => {
     setSelectedSpaceName(spaceName)
-    setActiveView('spaces')
+    navigateToView('spaces')
   }
   const openSpaceCreator = () => {
     setSelectedSpaceName(null)
-    setActiveView('spaces')
+    navigateToView('spaces')
     setIsSpaceCreateOpen(true)
   }
   const saveSpaceItem = async (space: KnowledgeSpace, previousName: string | null = null) => {
@@ -574,7 +632,7 @@ function App() {
     setKnowledgeAssets((current) => current.filter((asset) => asset.space !== spaceName))
     if (selectedSpaceName === spaceName) {
       setSelectedSpaceName(null)
-      setActiveView('spaces')
+      navigateToView('spaces')
     }
     addEvent(currentUserName, 'Deleted space', spaceName, 'Workspace')
     return null
@@ -602,12 +660,9 @@ function App() {
       }
       setRole(resolveRoleFromMetadata(profileRole))
       setIsLoggedOut(false)
-      if (typeof window !== 'undefined') {
-        const nextUrl = new URL(window.location.href)
-        nextUrl.searchParams.delete('auth')
-        nextUrl.searchParams.delete('redirect')
-        window.history.replaceState({}, '', nextUrl)
-      }
+      setActiveView('overview')
+      setSelectedArticleId(null)
+      window.history.replaceState({}, '', routePaths.overview)
     } catch {
       setResetNotice('Unable to reach the sign-in service. Check your connection and try again.')
     } finally {
@@ -634,29 +689,27 @@ function App() {
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
-    <Sidebar activeView={effectiveView} onNavigate={setActiveView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
+    <Sidebar activeView={effectiveView} onNavigate={navigateToView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => setActiveView('search')} onAskAtlas={() => setActiveView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
+      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => navigateToView('search')} onAskAtlas={() => navigateToView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
         const { error } = await signOut()
         if (error) setResetNotice(error)
         setIsLoggedOut(true)
-        if (typeof window !== 'undefined') {
-          const nextUrl = new URL(window.location.href)
-          nextUrl.searchParams.set('auth', 'login')
-          window.history.replaceState({}, '', nextUrl)
-        }
+        setActiveView('overview')
+        setSelectedArticleId(null)
+        window.history.replaceState({}, '', '/')
       }} />
       <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Could not load workspace data from Supabase: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status"><LoaderCircle className="auth-loading-spinner" size={18} /> Loading workspace data…</div> : <Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
-        {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={setActiveView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={navigateToView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={setActiveView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
+        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={navigateToView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && articlePageLoading && <div className="page-loading" role="status">Loading article…</div>}
-        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => setActiveView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
+        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => navigateToView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
         {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsPageLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
-        {effectiveView === 'help' && <HelpCenter onNavigate={setActiveView} />}
+        {effectiveView === 'help' && <HelpCenter onNavigate={navigateToView} />}
         {effectiveView === 'analytics' && <AnalyticsView articles={articles} role={role} currentUserName={currentUserName} zeroResultQueries={zeroResultQueries} loading={searchGapsPageLoading} />}
         {effectiveView === 'people' && (adminPageLoading ? <div className="page-loading" role="status">Loading workspace members…</div> : <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
         {effectiveView === 'settings' && (settingsPageLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
