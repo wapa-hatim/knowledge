@@ -342,7 +342,7 @@ export async function loadArticleDetails(articleId: string) {
     supabase.rpc('get_workspace_member_directory'),
   ])
   const error = articleResult.error ?? commentsResult.error ?? versionsResult.error ?? profilesResult.error
-  if (error) return { data: null, error: error.message }
+  if (error || !articleResult.data) return { data: null, error: error?.message ?? 'Could not load article body.' }
   const profiles = mapWorkspaceMembers(profilesResult.data)
   return {
     data: {
@@ -494,7 +494,7 @@ export async function saveArticleComment(articleId: string, body: string) {
   const { id: userId, error: userError } = await getAuthenticatedUserId()
   if (userError || !userId) return { error: userError }
   const { error } = await supabase.from('article_comments').insert({ article_id: articleId, author_id: userId, body })
-  return { error: error?.message ?? null }
+  return { error: articleWriteError(error) }
 }
 
 export async function saveArticleFeedback(articleId: string, helpful: boolean, feedback = '') {
@@ -507,7 +507,13 @@ export async function saveArticleFeedback(articleId: string, helpful: boolean, f
     helpful,
     feedback,
   }, { onConflict: 'article_id,user_id' })
-  return { error: error?.message ?? null }
+  return { error: articleWriteError(error) }
+}
+
+function articleWriteError(error: { code: string; message: string } | null) {
+  if (!error) return null
+  if (error.code === '42501') return 'Your account needs active membership in this article’s space to do that.'
+  return error.message
 }
 
 export async function saveArticleVersion(article: Article, body: string) {
@@ -895,15 +901,13 @@ export async function uploadKnowledgeFile(file: File, spaceName: string, kind: s
     return { data: null, error: userError?.message ?? 'Sign in before uploading a file.' }
   }
 
-  const slug = spaceName.toLowerCase().replace(/&/g, ' ').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const { data: space, error: spaceError } = await supabase
     .from('spaces')
     .select('id, name, slug')
-    .eq('slug', slug)
-    .single()
-  if (spaceError || !space) {
-    return { data: null, error: spaceError?.message ?? `Space "${spaceName}" was not found in Supabase.` }
-  }
+    .eq('name', spaceName)
+    .maybeSingle()
+  if (spaceError) return { data: null, error: spaceError.message }
+  if (!space) return { data: null, error: `Space "${spaceName}" is not available to your account. Ask a workspace admin to add you to that space.` }
 
   const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '-')
   const filePath = `${space.slug}/${userData.user.id}/${crypto.randomUUID()}-${safeFileName}`
@@ -917,9 +921,11 @@ export async function uploadKnowledgeFile(file: File, spaceName: string, kind: s
     return { data: null, error: uploadError.message }
   }
 
-  const { data, error: metadataError } = await supabase
+  const assetId = crypto.randomUUID()
+  const { error: metadataError } = await supabase
     .from('knowledge_assets')
     .insert({
+      id: assetId,
       space_id: space.id,
       uploaded_by: userData.user.id,
       name: file.name,
@@ -929,8 +935,6 @@ export async function uploadKnowledgeFile(file: File, spaceName: string, kind: s
       byte_size: file.size,
       status: 'Processing',
     })
-    .select('id, name, kind, status, created_at')
-    .single()
 
   if (metadataError) {
     await supabase.storage.from(supabaseBucket).remove([filePath])
@@ -939,13 +943,13 @@ export async function uploadKnowledgeFile(file: File, spaceName: string, kind: s
 
   return {
     data: {
-      id: data.id,
-      name: data.name,
-      kind: data.kind,
+      id: assetId,
+      name: file.name,
+      kind: kind as KnowledgeAsset['kind'],
       space: space.name,
       size: fileSizeLabel(file.size),
       updated: 'Just now',
-      status: data.status,
+      status: 'Processing',
       storagePath: filePath,
     },
     error: null,
