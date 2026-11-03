@@ -419,7 +419,7 @@ export async function loadKnowledgeHubData(role: Role) {
   const error = spacesResult.error ?? assetsResult.error ?? modelsResult.error ?? integrationsResult.error ?? taxonomyResult.error ?? profilesResult.error
   if (error) return { data: null, error: error.message }
   const spaces = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
-  const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name || 'Workspace member']))
+  const profiles = mapWorkspaceMembers(profilesResult.data)
   return {
     data: {
       assets: (assetsResult.data ?? []).map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind as KnowledgeAsset['kind'], space: spaces.get(asset.space_id) ?? 'Unknown space', size: assetSize(asset.byte_size), updated: relativeDate(asset.created_at), status: asset.status as KnowledgeAsset['status'], storagePath: asset.storage_path })),

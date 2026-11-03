@@ -112,7 +112,8 @@ function App() {
   }, [articles, search])
 
   useEffect(() => {
-    if (!supabase) return
+    const client = supabase
+    if (!client) return
     isMountedRef.current = true
     const clearWorkspace = () => {
       setAuthUserId(null)
@@ -142,7 +143,7 @@ function App() {
       pendingSectionsRef.current.clear()
       setLoadedSections(new Set())
     }
-    const syncSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'], forceLogin: boolean) => {
+    const syncSession = async (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session'], forceLogin: boolean) => {
       if (!isMountedRef.current) return
       if (!session || forceLogin) {
         activeUserIdRef.current = null
@@ -193,7 +194,7 @@ function App() {
       setWorkspaceDataLoading(false)
     }
 
-    void supabase.auth.getSession().then(({ data }) => {
+    void client.auth.getSession().then(({ data }) => {
       const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
       return syncSession(data.session, forceLogin)
     }).catch(() => {
@@ -203,7 +204,7 @@ function App() {
       setIsAuthLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
       window.setTimeout(() => {
         const forceLogin = new URLSearchParams(window.location.search).get('auth') === 'login'
         void syncSession(session, forceLogin)
@@ -363,22 +364,24 @@ function App() {
     const { error } = await createIntegrationRecord(integration)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return error
     }
     setKnowledgeIntegrations((current) => [integration, ...current])
     setIsSourceOpen(false)
     addEvent(currentUserName, 'Added source connector', integration.name, 'Workspace')
     setActiveView('models')
+    return null
   }
   const addTaxonomyTerm = async (term: string) => {
-    if (taxonomyTerms.includes(term)) return
+    if (taxonomyTerms.includes(term)) return null
     const { error } = await createTaxonomyTerm(term)
     if (error) {
       setWorkspaceDataError(error)
-      return
+      return error
     }
     setTaxonomyTerms((current) => [...current, term])
     addEvent(currentUserName, 'Added taxonomy term', `#${term}`, 'Workspace')
+    return null
   }
   const changeWorkspaceSettings = async (nextSettings: WorkspaceSettings) => {
     const { error } = await persistWorkspaceSettings(nextSettings)

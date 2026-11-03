@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import type { ButtonHTMLAttributes } from 'react'
+import { LoaderCircle } from 'lucide-react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { cn } from './cn'
 
 const buttonStyles = cva('ui-button', {
@@ -9,5 +10,10 @@ const buttonStyles = cva('ui-button', {
   },
   defaultVariants: { variant: 'primary', size: 'default' },
 })
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonStyles>
-export function Button({ className, variant, size, ...props }: ButtonProps) { return <button className={cn(buttonStyles({ variant, size }), className)} {...props} /> }
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonStyles> & { isLoading?: boolean; loadingText?: string; children: ReactNode }
+export function Button({ className, variant, size, isLoading = false, loadingText, children, disabled, ...props }: ButtonProps) {
+  return <button className={cn(buttonStyles({ variant, size }), isLoading && 'ui-button-loading', className)} disabled={disabled || isLoading} aria-busy={isLoading || undefined} {...props}>
+    {isLoading && <LoaderCircle className="ui-button-spinner" size={14} aria-hidden="true" />}
+    {isLoading ? loadingText ?? children : children}
+  </button>
+}
