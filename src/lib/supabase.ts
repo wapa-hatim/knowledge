@@ -416,8 +416,16 @@ export async function loadKnowledgeHubData(role: Role) {
     supabase.from('taxonomy_terms').select('name').order('name'),
     ownerProfiles,
   ])
-  const error = spacesResult.error ?? assetsResult.error ?? modelsResult.error ?? integrationsResult.error ?? taxonomyResult.error ?? profilesResult.error
-  if (error) return { data: null, error: error.message }
+  const failedSources: [string, { message: string } | null][] = [
+    ['spaces', spacesResult.error],
+    ['assets', assetsResult.error],
+    ['knowledge models', modelsResult.error],
+    ['connected sources', integrationsResult.error],
+    ['taxonomy terms', taxonomyResult.error],
+    ['workspace members', profilesResult.error],
+  ]
+  const failedSource = failedSources.find(([, error]) => error !== null)
+  if (failedSource) return { data: null, error: `Could not load ${failedSource[0]}: ${failedSource[1]?.message}` }
   const spaces = new Map((spacesResult.data ?? []).map((space) => [space.id, space.name]))
   const profiles = mapWorkspaceMembers(profilesResult.data)
   return {
@@ -711,6 +719,12 @@ export async function createTaxonomyTerm(name: string) {
   const { id: userId, error: userError } = await getAuthenticatedUserId()
   if (userError || !userId) return { error: userError }
   const { error } = await supabase.from('taxonomy_terms').insert({ name, created_by: userId })
+  return { error: error?.message ?? null }
+}
+
+export async function deleteTaxonomyTerm(name: string) {
+  if (!supabase) return { error: 'Supabase is not configured.' }
+  const { error } = await supabase.from('taxonomy_terms').delete().eq('name', name)
   return { error: error?.message ?? null }
 }
 

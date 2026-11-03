@@ -14,7 +14,7 @@ import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import { parseViewCount } from './utils/articleMetrics'
 import HelpCenter from './features/help/HelpCenter'
-import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, deleteTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -450,12 +450,16 @@ function App() {
   const addTaxonomyTerm = async (term: string) => {
     if (taxonomyTerms.includes(term)) return null
     const { error } = await createTaxonomyTerm(term)
-    if (error) {
-      setWorkspaceDataError(error)
-      return error
-    }
+    if (error) return error
     setTaxonomyTerms((current) => [...current, term])
     addEvent(currentUserName, 'Added taxonomy term', `#${term}`, 'Workspace')
+    return null
+  }
+  const removeTaxonomyTerm = async (term: string) => {
+    const { error } = await deleteTaxonomyTerm(term)
+    if (error) return error
+    setTaxonomyTerms((current) => current.filter((existing) => existing !== term))
+    addEvent(currentUserName, 'Removed taxonomy term', `#${term}`, 'Workspace')
     return null
   }
   const changeWorkspaceSettings = async (nextSettings: WorkspaceSettings) => {
@@ -742,7 +746,7 @@ function App() {
       <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Supabase request failed: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status"><LoaderCircle className="auth-loading-spinner" size={18} /> Loading workspace data…</div> : <Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
         {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={navigateToView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onNavigate={navigateToView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} />}
+        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} canManageTaxonomy={role === 'Super Admin' || role === 'Space Admin'} onNavigate={navigateToView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} onRemoveTaxonomyTerm={removeTaxonomyTerm} />}
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && articlePageLoading && <div className="page-loading" role="status">Loading article…</div>}

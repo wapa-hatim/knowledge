@@ -1,4 +1,95 @@
-# React + TypeScript + Vite
+# Atlas Knowledge Workspace
+
+## Atlas User Guide
+
+Atlas is a shared knowledge workspace. Sign in at `/`, then use the workspace navigation to find articles, spaces, questions, and administration tools. The application stores workspace records in Supabase; it does not use a local demo-data fallback.
+
+### The basic workflow
+
+1. A Super Admin creates spaces and invites people from **People & permissions**.
+2. The invitee opens the Supabase invitation email and sets a password. New invitees must finish password setup before entering the workspace.
+3. Members create articles in the appropriate space, then request review.
+4. Reviewers or admins review content, and authorized users publish it.
+5. Members find content through the library, space pages, or search. They can bookmark articles and participate in questions and answers.
+
+### Sign-in and passwords
+
+- `/` is the sign-in page. After signing in, Atlas opens `/dashboard`.
+- An invitation does not contain a shared or generated password. Supabase sends the invitee a link to establish their own password.
+- On first access, invitees are required to choose a password with at least 12 characters.
+- Signed-in users can choose **Change password** from their account menu. They must provide their current password.
+- **Forgot password?** sends a recovery link to the user's email.
+- Supabase must have email delivery configured, and the app's production URL must be an allowed Auth redirect URL.
+
+### Spaces and membership
+
+A space is the access boundary for articles, questions, and uploaded files. A user must be an active workspace member and have membership in the relevant space to use its protected data. Super Admins can manage the workspace; space membership is stored in `space_members`.
+
+When inviting someone, choose the specific space they need or **All spaces**. A user who is not a member may see row-level security (RLS) errors when commenting, voting, bookmarking, or uploading. Fix the membership rather than weakening the RLS policies.
+
+### Articles
+
+- From **Knowledge library**, select **Add knowledge**, then **Write documentation**. Choose a space and a starting format such as Standard article, SOP, FAQ, or Post-mortem.
+- The article is created as a Draft. Editing autosaves the Markdown body. **Save version** adds a restorable version to its history.
+- **Request review** changes a Draft to Under review. The review queue shows articles awaiting review. Approval publishes an article; published articles can later be archived.
+- Article details also include comments, helpful/not-helpful feedback, bookmarks, version comparison, and article metadata.
+- Articles belong to a space and have one category. Categories are scoped to a space and are used to organize and filter its articles.
+
+### Categories, tags, and taxonomy
+
+These are different concepts in the current app:
+
+- **Category** is an article's primary filing label inside one space, such as Runbooks or Guides. The same category name may exist in more than one space.
+- **Article tags** are a list of labels on an article. They can appear in article details and search, but the current article creation/editing screens do not provide a complete tag-management workflow.
+- **Taxonomy & entities** in **Formats & models** is currently a workspace-wide vocabulary list. Add consistent terms for concepts such as product names, systems, or teams. The form trims whitespace, removes a leading `#`, and stores the term in lowercase.
+- Super Admins and Space Admins can remove a term with the trash button beside it, then confirm. Removing a term also removes any article-to-term links. Other roles can view the shared list but do not get add/remove controls.
+
+Important: adding a taxonomy term does not currently attach it to an article, create entity relationships, or automatically generate article tags. The hub displays the vocabulary and retrieval-readiness counts, but a full taxonomy-to-content workflow is not implemented yet. Taxonomy writes are limited by the database to Super Admins and Space Admins.
+
+### Files, sources, and AI readiness
+
+- **Upload files & media** stores the file in the private `knowledge-assets` Supabase Storage bucket and writes an asset record in its selected space. The uploader must be a member of that space. Files are limited to 100 MB.
+- Newly uploaded assets start with status **Processing**. A background extraction/indexing worker is not configured by this app yet, so do not assume that Processing will automatically become Indexed.
+- **Connect source** currently saves a source-connector record. It does not itself configure scheduled GitHub/API synchronization.
+- The AI-context panel is informational. Vector embeddings, retrieval, and cited AI answers require a separate search and generation service; they are not currently configured by this app.
+
+### Questions and answers
+
+Use **Questions & answers** to post a question in a space and add answers. Members can vote on questions and answers; a vote is one record per user and can be removed by voting again. Reviewers and admins can verify answers in the interface. Voting and question access are restricted to members of the question's space.
+
+### Roles at a glance
+
+| Role | Typical use |
+| --- | --- |
+| Super Admin | Manage workspace members, settings, spaces, and content. |
+| Space Admin | Manage content and membership permissions for assigned spaces. |
+| Author | Create and edit knowledge content in assigned spaces. |
+| Reviewer | Work with the review queue and verify answers. |
+| Viewer | Read available knowledge and participate in allowed questions. |
+
+Access is also checked by Supabase RLS, not only by which buttons the interface displays. In particular, actions on an article or question require membership in that item's space. If a Reviewer who is not the owner or a Space Admin cannot publish an article, that is an RLS permission limitation to address in the database policy; the UI role alone does not grant database access.
+
+### Administration
+
+- **People & permissions**: invite a member, set their role and space, edit their profile, suspend/reactivate them, or send a password-reset link. Invited members set their own password through the email link.
+- **Workspace settings**: set review expectations and workspace defaults. Authentication-provider settings and email delivery are configured in Supabase Auth.
+- **Audit trail**: inspect recorded workspace and content events.
+- **Formats & models**: manage the taxonomy vocabulary, view uploaded assets and source records, and inspect configured knowledge models.
+
+### Common problems
+
+| Symptom | What to check |
+| --- | --- |
+| `new row violates row-level security policy` | Confirm the signed-in user is Active and is a member of the selected space. Do not remove the membership checks as a workaround. |
+| Upload says a space is unavailable | Select a space the user belongs to. Confirm the selected space exists in Supabase and the `knowledge-assets` bucket is configured. |
+| Invite request cannot reach `manage-workspace-user` | Confirm that Edge Function is deployed to the same Supabase project as `VITE_SUPABASE_URL`. Check its logs and Auth email delivery. |
+| A migration or `supabase db push` fails | Read the complete CLI error before retrying. Confirm the CLI is authenticated and linked to the intended project; do not assume the production database has the latest schema. |
+| Asset stays at Processing or a source does not sync | These statuses/actions do not include a background indexing or synchronization service yet. |
+| Taxonomy term does not appear on an article | Taxonomy is currently a shared vocabulary only; it is not attached to article tags or categories. |
+
+### Direct URLs
+
+The main screens can be opened directly when signed in: `/dashboard`, `/library`, `/models`, `/reviews`, `/questions`, `/spaces`, `/search`, and `/help`. Article details use `/articles/<article-id>`. Admin-only screens include `/people`, `/settings`, and `/audit`. Signed-out users are sent to `/`.
 
 ## Supabase setup
 
