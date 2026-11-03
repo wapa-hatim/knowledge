@@ -75,7 +75,7 @@ export function KnowledgeAssetDialog({ open, onOpenChange, onCreate, spaces, ini
       <div className="form-row"><div><label className="form-label" htmlFor="asset-kind">Asset type</label><div className="select-field"><select id="asset-kind" value={kind} onChange={(event) => setKind(event.target.value as KnowledgeAsset['kind'])}>{assetKinds.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></div></div><div><label className="form-label" htmlFor="asset-space">Space</label><div className="select-field"><select id="asset-space" value={space} onChange={(event) => setSpace(event.target.value)}>{spaces.map((item) => <option key={item.name}>{item.name}</option>)}</select><ChevronDown size={14} /></div></div></div>
       <div className="asset-note">Files are uploaded to private Supabase Storage. Only signed-in members of this space can access them.</div>
       {uploadError && <p className="auth-reset-note" role="alert">{uploadError}</p>}
-      <div className="dialog-actions"><Button variant="ghost" type="button" onClick={() => handleOpenChange(false)} disabled={isUploading}>Cancel</Button><Button type="submit" disabled={!file || isUploading}>{isUploading ? 'Uploading…' : 'Upload asset'}</Button></div>
+      <div className="dialog-actions"><Button variant="ghost" type="button" onClick={() => handleOpenChange(false)} disabled={isUploading}>Cancel</Button><Button type="submit" isLoading={isUploading} loadingText="Uploading…" disabled={!file}>Upload asset</Button></div>
     </form>
   </Dialog.Content></Dialog.Portal></Dialog.Root>
 }

@@ -1,0 +1,70 @@
+.sidebar-space-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.spaces-accordion-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 31px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #a7bdb4;
+  text-align: left;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .7px;
+}
+
+.spaces-accordion-trigger:hover {
+  color: #f1f7f4;
+  background: #234a40;
+}
+
+.spaces-chevron {
+  margin-left: auto;
+  transition: transform .16s ease;
+}
+
+.sidebar-spaces.expanded .spaces-chevron {
+  transform: rotate(180deg);
+}
+
+.space-create-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 29px;
+  padding: 0 9px;
+  border: 1px solid #347a61;
+  border-radius: 6px;
+  color: #fff;
+  background: #2f7662;
+  font-size: 10px;
+  font-weight: 600;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.space-create-button:hover {
+  border-color: #3c8b6d;
+  background: #3a846a;
+}
+
+.sidebar-spaces-list {
+  display: grid;
+  gap: 2px;
+}
+
+.spaces-empty {
+  padding: 9px 10px;
+  color: #95aaa1;
+  font-size: 10px;
+}

@@ -38,7 +38,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSelect, space }: AddK
             <span className="knowledge-action-arrow">→</span>
           </button>)}
         </div>
-        <div className="knowledge-action-footnote"><Network size={13} /> Files and external connectors are saved as local demo records; server upload and sync are not configured.</div>
+        <div className="knowledge-action-footnote"><Network size={13} /> Files are stored in Supabase. Source records are saved there; scheduled sync requires server-side configuration.</div>
       </Dialog.Content>
     </Dialog.Portal>
   </Dialog.Root>

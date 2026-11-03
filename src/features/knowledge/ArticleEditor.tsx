@@ -10,8 +10,8 @@ import { Bold, Code2, Heading2, ImagePlus, Italic, List, ListOrdered, Save, Tabl
 interface ArticleEditorProps {
   articleId: string
   initialBody: string
-  onAutosave: (body: string) => void
-  onSaveVersion: (body: string) => void
+  onAutosave: (body: string) => Promise<boolean>
+  onSaveVersion: (body: string) => Promise<boolean>
   onCancel: () => void
   onSubmitReview: () => void
 }
@@ -19,7 +19,7 @@ interface ArticleEditorProps {
 export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersion, onCancel, onSubmitReview }: ArticleEditorProps) {
   const [sourceMode, setSourceMode] = useState(false)
   const [source, setSource] = useState(initialBody)
-  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editor = useEditor({
     extensions: [StarterKit, Markdown, Image, Table.configure({ resizable: true }), TableRow, TableHeader, TableCell, Placeholder.configure({ placeholder: 'Start writing. Use / for blocks, or the toolbar for formatting.' })],
@@ -30,8 +30,7 @@ export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersio
       setSaveState('saving')
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
-        onAutosave(currentEditor.getMarkdown())
-        setSaveState('saved')
+        void onAutosave(currentEditor.getMarkdown()).then((saved) => setSaveState(saved ? 'saved' : 'error')).catch(() => setSaveState('error'))
       }, 650)
     },
   }, [articleId])
@@ -60,11 +59,11 @@ export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersio
     reader.readAsDataURL(file)
   }
 
-  const saveVersion = () => {
+  const saveVersion = async () => {
     const body = sourceMode ? source : editor?.getMarkdown() ?? initialBody
-    onAutosave(body)
-    onSaveVersion(body)
-    setSaveState('saved')
+    setSaveState('saving')
+    const saved = await onSaveVersion(body)
+    setSaveState(saved ? 'saved' : 'error')
   }
 
   return <section className="editor-workspace">
@@ -80,9 +79,9 @@ export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersio
         <button type="button" title="Insert table" aria-label="Insert table" disabled={!editor || sourceMode} onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><Table2 size={16} /></button>
         <label className="editor-image-button" title="Insert image" aria-label="Insert image"><ImagePlus size={16} /><input type="file" accept="image/*" onChange={(event) => addImage(event.target.files?.[0])} /></label>
       </div>
-      <div className="editor-toolbar-actions"><span className="autosave-state"><i className={saveState === 'saving' ? 'is-saving' : ''} />{saveState === 'saving' ? 'Saving…' : 'Saved locally'}</span><button type="button" className={`editor-mode-button${sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Markdown</button><button type="button" className={`editor-mode-button${!sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Visual</button></div>
+      <div className="editor-toolbar-actions"><span className="autosave-state"><i className={saveState === 'saving' ? 'is-saving' : saveState === 'error' ? 'is-error' : ''} />{saveState === 'saving' ? 'Saving to Supabase…' : saveState === 'error' ? 'Save failed' : 'Saved to Supabase'}</span><button type="button" className={`editor-mode-button${sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Markdown</button><button type="button" className={`editor-mode-button${!sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Visual</button></div>
     </div>
-    {sourceMode ? <textarea className="markdown-source" aria-label="Markdown source" value={source} onChange={(event) => { setSource(event.target.value); setSaveState('saving'); if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => { onAutosave(event.target.value); setSaveState('saved') }, 650) }} /> : <EditorContent editor={editor} className="tiptap-content" />}
-    <div className="editor-footer"><span>Changes are saved in this browser.</span><div><button className="ui-button ui-button-ghost ui-button-default" type="button" onClick={onCancel}>Cancel</button><button className="ui-button ui-button-outline ui-button-default" type="button" onClick={saveVersion}><Save size={14} />Save version</button><button className="ui-button ui-button-primary ui-button-default" type="button" onClick={onSubmitReview}>Submit for review</button></div></div>
+    {sourceMode ? <textarea className="markdown-source" aria-label="Markdown source" value={source} onChange={(event) => { const nextSource = event.target.value; setSource(nextSource); setSaveState('saving'); if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => { void onAutosave(nextSource).then((saved) => setSaveState(saved ? 'saved' : 'error')).catch(() => setSaveState('error')) }, 650) }} /> : <EditorContent editor={editor} className="tiptap-content" />}
+    <div className="editor-footer"><span>Changes sync to Supabase.</span><div><button className="ui-button ui-button-ghost ui-button-default" type="button" onClick={onCancel}>Cancel</button><button className="ui-button ui-button-outline ui-button-default" type="button" onClick={() => void saveVersion()}><Save size={14} />Save version</button><button className="ui-button ui-button-primary ui-button-default" type="button" onClick={onSubmitReview}>Submit for review</button></div></div>
   </section>
 }
