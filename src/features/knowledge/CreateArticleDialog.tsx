@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { BookTemplate, ChevronDown, FileText, Plus, X } from 'lucide-react'
 import type { Article, KnowledgeSpace } from '../../types'
@@ -12,6 +12,8 @@ export function CreateArticleDialog({ open, onOpenChange, onCreate, author, spac
   const [template, setTemplate] = useState('Standard article')
   const [error, setError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const isSubmittingRef = useRef(false)
+  const pendingArticleIdRef = useRef<string | null>(null)
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -20,26 +22,30 @@ export function CreateArticleDialog({ open, onOpenChange, onCreate, author, spac
       setTitle('')
       setTemplate('Standard article')
       setSpace(initialSpace)
+      pendingArticleIdRef.current = null
     }
     onOpenChange(nextOpen)
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!title.trim() || !space) return
+    if (isSubmittingRef.current || !title.trim() || !space) return
+    isSubmittingRef.current = true
     const initials = author.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
     setError('')
     setIsCreating(true)
     try {
-      const result = await onCreate({ id: crypto.randomUUID(), title: title.trim(), summary: '', space, category: template === 'Standard article' ? 'Guides' : template, owner: author, updated: 'Just now', status: 'Draft', views: '0', tags: [], initials, color: 'mint', body: '' })
+      const result = await onCreate({ id: pendingArticleIdRef.current ?? (pendingArticleIdRef.current = crypto.randomUUID()), title: title.trim(), summary: '', space, category: template === 'Standard article' ? 'Guides' : template, owner: author, updated: 'Just now', status: 'Draft', views: '0', tags: [], initials, color: 'mint', body: '' })
       if (result) {
         setError(result)
         return
       }
+      pendingArticleIdRef.current = null
       setTitle('')
     } catch {
       setError('Could not create the article. Please try again.')
     } finally {
+      isSubmittingRef.current = false
       setIsCreating(false)
     }
   }
