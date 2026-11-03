@@ -57,15 +57,21 @@ Deno.serve(async (request) => {
   const { data: authData, error: authError } = await sessionClient.auth.getUser()
   if (authError || !authData.user) return response({ error: 'Your session is invalid or expired.' }, 401)
 
-  const { data: actor, error: actorError } = await admin.from('profiles').select('role, status').eq('id', authData.user.id).single()
-  if (actorError || actor?.role !== 'Super Admin' || actor.status !== 'Active') return response({ error: 'Only an active Super Admin can manage workspace users.' }, 403)
-
   let input: { action?: string; member?: MemberInput; userId?: string; status?: string }
   try {
     input = await request.json()
   } catch {
     return response({ error: 'Provide a valid JSON request body.' }, 400)
   }
+
+  if (input.action === 'complete-password-setup') {
+    const { error } = await admin.from('profiles').update({ password_setup_required: false }).eq('id', authData.user.id)
+    if (error) return response({ error: error.message }, 500)
+    return response({ completed: true })
+  }
+
+  const { data: actor, error: actorError } = await admin.from('profiles').select('role, status').eq('id', authData.user.id).single()
+  if (actorError || actor?.role !== 'Super Admin' || actor.status !== 'Active') return response({ error: 'Only an active Super Admin can manage workspace users.' }, 403)
 
   if (input.action === 'invite') {
     const member = input.member ?? {}
@@ -98,6 +104,7 @@ Deno.serve(async (request) => {
       department,
       role,
       status: 'Invited',
+      password_setup_required: true,
     }, { onConflict: 'id' })
     if (profileError) {
       await admin.auth.admin.deleteUser(inviteData.user.id)

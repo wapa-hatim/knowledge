@@ -5,6 +5,7 @@ import { Sidebar } from './components/shell/Sidebar'
 import { Topbar } from './components/shell/Topbar'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { CreateArticleDialog } from './features/knowledge/CreateArticleDialog'
+import { PasswordChangeForm } from './features/account/PasswordChangeForm'
 import { KnowledgeTable } from './features/knowledge/KnowledgeTable'
 import { AddKnowledgeDialog, type KnowledgeAction } from './features/knowledge/AddKnowledgeDialog'
 import { KnowledgeAssetDialog } from './features/knowledge/KnowledgeAssetDialog'
@@ -13,7 +14,7 @@ import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import { parseViewCount } from './utils/articleMetrics'
 import HelpCenter from './features/help/HelpCenter'
-import { createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
@@ -90,6 +91,8 @@ function App() {
   const [isLoggedOut, setIsLoggedOut] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
+  const [passwordSetupRequired, setPasswordSetupRequired] = useState(false)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -150,6 +153,10 @@ function App() {
     if (isAuthLoading) return
     const syncRoute = () => {
       const route = resolveAppPath(window.location.pathname)
+      if (passwordSetupRequired) {
+        if (window.location.pathname !== '/set-password') window.history.replaceState({}, '', '/set-password')
+        return
+      }
       if (isLoggedOut) {
         if (window.location.pathname !== '/') window.history.replaceState({}, '', '/')
         setActiveView('overview')
@@ -168,7 +175,7 @@ function App() {
     syncRoute()
     window.addEventListener('popstate', syncRoute)
     return () => window.removeEventListener('popstate', syncRoute)
-  }, [isAuthLoading, isLoggedOut, role])
+  }, [isAuthLoading, isLoggedOut, passwordSetupRequired, role])
 
   useEffect(() => {
     const client = supabase
@@ -192,6 +199,8 @@ function App() {
       setAdminDataError(null)
       setWorkspaceDataError(null)
       setSettings(defaultSettings)
+      setPasswordSetupRequired(false)
+      setPasswordDialogOpen(false)
       setWorkspaceDataLoading(false)
       setAdminDataLoading(false)
       setQuestionsLoading(false)
@@ -202,21 +211,22 @@ function App() {
       pendingSectionsRef.current.clear()
       setLoadedSections(new Set())
     }
-    const syncSession = async (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session']) => {
+    const syncSession = async (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session'], forcePasswordSetup = false) => {
       if (!isMountedRef.current) return
       if (!session) {
         activeUserIdRef.current = null
         clearWorkspace()
         setRole('Viewer')
         setIsLoggedOut(true)
+        setPasswordSetupRequired(false)
         setIsAuthLoading(false)
         return
       }
 
-      if (activeUserIdRef.current === session.user.id) return
+      if (activeUserIdRef.current === session.user.id && !forcePasswordSetup && window.location.pathname !== '/set-password') return
       if (activeUserIdRef.current && activeUserIdRef.current !== session.user.id) clearWorkspace()
       activeUserIdRef.current = session.user.id
-      const { role: profileRole, userId, userName, error } = await getCurrentWorkspaceRole(session.user.id)
+      const { role: profileRole, userId, userName, passwordSetupRequired: profileRequiresPasswordSetup, error } = await getCurrentWorkspaceRole(session.user.id)
       if (!isMountedRef.current || activeUserIdRef.current !== session.user.id) return
       if (error || !profileRole || !userId) {
         activeUserIdRef.current = null
@@ -232,6 +242,14 @@ function App() {
       setAuthUserId(userId)
       setCurrentUserName(userName ?? '')
       setIsLoggedOut(false)
+      if (forcePasswordSetup || profileRequiresPasswordSetup || window.location.pathname === '/set-password') {
+        setPasswordSetupRequired(true)
+        setIsAuthLoading(false)
+        setWorkspaceDataLoading(false)
+        window.history.replaceState({}, '', '/set-password')
+        return
+      }
+      setPasswordSetupRequired(false)
       setIsAuthLoading(false)
       setWorkspaceDataLoading(true)
       const { data: workspaceData, error: workspaceError } = await loadCoreWorkspaceData(userId)
@@ -262,9 +280,9 @@ function App() {
       setIsAuthLoading(false)
     })
 
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       window.setTimeout(() => {
-        void syncSession(session)
+        void syncSession(session, event === 'PASSWORD_RECOVERY')
       }, 0)
     })
 
@@ -637,6 +655,19 @@ function App() {
     addEvent(currentUserName, 'Deleted space', spaceName, 'Workspace')
     return null
   }
+  const savePassword = async (password: string, currentPassword?: string) => {
+    const { error } = await changeOwnPassword(password, currentPassword)
+    if (error) return error
+    if (passwordSetupRequired) {
+      const { error: completionError } = await manageWorkspaceUser('complete-password-setup', {})
+      if (completionError) return completionError
+      setPasswordSetupRequired(false)
+      window.location.replace(routePaths.overview)
+    } else {
+      setPasswordDialogOpen(false)
+    }
+    return null
+  }
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = event.currentTarget
@@ -652,17 +683,24 @@ function App() {
         setResetNotice(error ?? 'Unable to sign in. Please try again.')
         return
       }
-      const { role: profileRole, error: profileError } = await getCurrentWorkspaceRole(data.user.id)
+      const { role: profileRole, userId, userName, passwordSetupRequired: mustSetPassword, error: profileError } = await getCurrentWorkspaceRole(data.user.id)
       if (profileError || !profileRole) {
         await signOut()
         setResetNotice(profileError ?? 'Your workspace profile is not set up yet. Ask an administrator to provision your account.')
         return
       }
       setRole(resolveRoleFromMetadata(profileRole))
+      setAuthUserId(userId ?? data.user.id)
+      setCurrentUserName(userName ?? '')
       setIsLoggedOut(false)
-      setActiveView('overview')
-      setSelectedArticleId(null)
-      window.history.replaceState({}, '', routePaths.overview)
+      setPasswordSetupRequired(Boolean(mustSetPassword))
+      if (mustSetPassword) {
+        window.history.replaceState({}, '', '/set-password')
+      } else {
+        setActiveView('overview')
+        setSelectedArticleId(null)
+        window.history.replaceState({}, '', routePaths.overview)
+      }
     } catch {
       setResetNotice('Unable to reach the sign-in service. Check your connection and try again.')
     } finally {
@@ -685,13 +723,15 @@ function App() {
   const searchGapsPageLoading = searchGapsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'analytics' && !loadedSections.has('search-gaps'))
   const articlePageLoading = Boolean(authUserId && selectedArticle && selectedArticle.body === undefined)
 
+  if (passwordSetupRequired) return <main className="signed-out-screen"><section className="signed-out-panel"><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">SECURE YOUR ACCOUNT</div><h1>Set your password.</h1><p>Choose a password before continuing to your workspace.</p><PasswordChangeForm requireCurrentPassword={false} submitLabel="Set password" onSave={savePassword} /></section></main>
+
   if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><p>Checking your session…</p></section></main>
   if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
 
   return <div className="app-shell">
     <Sidebar activeView={effectiveView} onNavigate={navigateToView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
     <div className="app-main">
-      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => navigateToView('search')} onAskAtlas={() => navigateToView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onLogout={async () => {
+      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => navigateToView('search')} onAskAtlas={() => navigateToView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onChangePassword={() => setPasswordDialogOpen(true)} onLogout={async () => {
         const { error } = await signOut()
         if (error) setResetNotice(error)
         setIsLoggedOut(true)
@@ -720,6 +760,7 @@ function App() {
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
+    <Dialog.Root open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog"><div className="dialog-heading"><Dialog.Title>Change your password</Dialog.Title><Dialog.Description>Enter your current password and choose a new one with at least 12 characters.</Dialog.Description></div><PasswordChangeForm requireCurrentPassword submitLabel="Save password" onSave={savePassword} onCancel={() => setPasswordDialogOpen(false)} /></Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>
 }
 

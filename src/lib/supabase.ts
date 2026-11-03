@@ -780,7 +780,7 @@ export async function loadWorkspaceAdminData(mode: 'people' | 'audit' = 'people'
 }
 
 export async function manageWorkspaceUser(
-  action: 'invite' | 'update' | 'status' | 'delete',
+  action: 'invite' | 'update' | 'status' | 'delete' | 'complete-password-setup',
   payload: { member?: Partial<WorkspaceUser>; userId?: string; status?: WorkspaceUser['status'] },
 ) {
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
@@ -821,10 +821,8 @@ export async function resetPassword(email: string) {
     return { data: null, error: 'Password reset is unavailable. Configure Supabase first.' }
   }
 
-  const redirectUrl = new URL(window.location.origin)
-  redirectUrl.searchParams.set('auth', 'login')
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: redirectUrl.toString(),
+    redirectTo: window.location.origin,
   })
 
   if (error) {
@@ -859,13 +857,25 @@ export async function getCurrentWorkspaceRole(authenticatedUserId?: string) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('role, display_name, status')
+    .select('role, display_name, status, password_setup_required')
     .eq('id', resolvedUserId)
     .single()
 
   if (error) return { role: null, error: error.message }
   if (data.status !== 'Active') return { role: null, error: 'Your workspace account is not active.' }
-  return { role: data.role as string, userId: resolvedUserId, userName: data.display_name || 'Workspace member', error: null }
+  return { role: data.role as string, userId: resolvedUserId, userName: data.display_name || 'Workspace member', passwordSetupRequired: data.password_setup_required, error: null }
+}
+
+export async function changeOwnPassword(password: string, currentPassword?: string) {
+  if (!supabase) return { error: 'Password changes are unavailable. Configure Supabase first.' }
+  if (currentPassword) {
+    const { data, error: userError } = await supabase.auth.getUser()
+    if (userError || !data.user?.email) return { error: userError?.message ?? 'Could not verify the signed-in account.' }
+    const { error: verifyError } = await supabase.auth.signInWithPassword({ email: data.user.email, password: currentPassword })
+    if (verifyError) return { error: 'Current password is incorrect.' }
+  }
+  const { error } = await supabase.auth.updateUser({ password })
+  return { error: error?.message ?? null }
 }
 
 function fileSizeLabel(bytes: number) {
