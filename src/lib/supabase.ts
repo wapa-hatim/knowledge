@@ -949,19 +949,17 @@ export async function uploadKnowledgeFile(file: File, spaceName: string, kind: s
     return { data: null, error: metadataError.message }
   }
 
-  return {
-    data: {
-      id: assetId,
-      name: file.name,
-      kind: kind as KnowledgeAsset['kind'],
-      space: space.name,
-      size: fileSizeLabel(file.size),
-      updated: 'Just now',
-      status: 'Processing',
-      storagePath: filePath,
-    },
-    error: null,
+  const asset: KnowledgeAsset = {
+    id: assetId,
+    name: file.name,
+    kind: kind as KnowledgeAsset['kind'],
+    space: space.name,
+    size: fileSizeLabel(file.size),
+    updated: 'Just now',
+    status: 'Processing',
+    storagePath: filePath,
   }
+  return { data: asset, error: null }
 }
 
 export async function createKnowledgeAssetUrl(storagePath: string, expiresIn = 3600) {
