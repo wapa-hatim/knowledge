@@ -7,16 +7,16 @@ for (const name of requiredEnv) {
 
 const accounts = [
   { email: 'admin@atlas.com', name: 'Atlas Admin', department: 'Operations', role: 'Super Admin', passwordKey: 'SEED_ADMIN_PASSWORD' },
-  { email: 'spaceadmin@atlas.com', name: 'Engineering Admin', department: 'Engineering', role: 'Space Admin', space: 'engineering', passwordKey: 'SEED_SPACE_ADMIN_PASSWORD' },
+  { email: 'spaceadmin@atlas.com', name: 'Engineering Admin', department: 'Engineering', role: 'Space Admin', space: '', passwordKey: 'SEED_SPACE_ADMIN_PASSWORD' },
   { email: 'author@atlas.com', name: 'Atlas Author', department: 'Product', role: 'Author', space: 'product-design', passwordKey: 'SEED_AUTHOR_PASSWORD' },
-  { email: 'reviewer@atlas.com', name: 'Atlas Reviewer', department: 'Security', role: 'Reviewer', space: 'security', passwordKey: 'SEED_REVIEWER_PASSWORD' },
-  { email: 'viewer@atlas.com', name: 'Atlas Viewer', department: 'Customer Success', role: 'Viewer', space: 'customer-success', passwordKey: 'SEED_VIEWER_PASSWORD' },
+  { email: 'reviewer@atlas.com', name: 'Atlas Reviewer', department: 'Security', role: 'Reviewer', space: '', passwordKey: 'SEED_REVIEWER_PASSWORD' },
+  { email: 'viewer@atlas.com', name: 'Atlas Viewer', department: 'Customer Success', role: 'Viewer', space: '', passwordKey: 'SEED_VIEWER_PASSWORD' },
 ]
 
 for (const account of accounts) {
   const password = process.env[account.passwordKey]
-  if (!password || password.length < 14) {
-    throw new Error(`${account.passwordKey} must be set to a unique password of at least 14 characters.`)
+  if (!password || password.length < 8) {
+    throw new Error(`${account.passwordKey} must be set to a unique password of at least 8 characters.`)
   }
 }
 
