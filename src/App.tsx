@@ -528,6 +528,17 @@ function App() {
     addEvent(currentUserName, 'Saved version', selectedArticle.title, 'Content')
     return true
   }
+  const updateArticleTags = async (tags: string[]) => {
+    if (!selectedArticle) return false
+    const updatedArticle = { ...selectedArticle, tags, updated: 'Just now' }
+    const { error } = await saveArticleRecord(updatedArticle)
+    if (error) {
+      setWorkspaceDataError(error)
+      return false
+    }
+    updateArticle(selectedArticle.id, () => updatedArticle)
+    return true
+  }
   const changeArticleStatus = async (status: ArticleStatus) => {
     if (!selectedArticle) return false
     const updatedArticle = { ...selectedArticle, status, updated: 'Just now' }
@@ -750,7 +761,7 @@ function App() {
         {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && articlePageLoading && <div className="page-loading" role="status">Loading article…</div>}
-        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => navigateToView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
+        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBack={() => navigateToView('library')} onBookmark={() => void toggleBookmark(selectedArticle.id)} onTagsChange={updateArticleTags} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
         {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
         {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsPageLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={navigateToView} />}
