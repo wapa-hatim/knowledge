@@ -12,6 +12,7 @@ interface ArticleDetailProps {
   role: Role
   currentUserName: string
   bookmarked: boolean
+  taxonomyTerms: string[]
   onBack: () => void
   onBookmark: () => void
   onTagsChange: (tags: string[]) => Promise<boolean>
@@ -24,12 +25,13 @@ interface ArticleDetailProps {
   onDelete: () => Promise<void>
 }
 
-export function ArticleDetail({ article, role, currentUserName, bookmarked, onBack, onBookmark, onTagsChange, onAutosave, onSaveVersion, onStatusChange, onComment, onFeedback, onRestoreVersion, onDelete }: ArticleDetailProps) {
+export function ArticleDetail({ article, role, currentUserName, bookmarked, taxonomyTerms, onBack, onBookmark, onTagsChange, onAutosave, onSaveVersion, onStatusChange, onComment, onFeedback, onRestoreVersion, onDelete }: ArticleDetailProps) {
   const [editing, setEditing] = useState(false)
   const [comment, setComment] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [feedbackNotice, setFeedbackNotice] = useState('')
   const [newTag, setNewTag] = useState('')
+  const [selectedTaxonomyTerm, setSelectedTaxonomyTerm] = useState('')
   const [tagNotice, setTagNotice] = useState('')
   const [compareVersion, setCompareVersion] = useState(article.versions?.[0]?.id ?? '')
   const canEdit = role !== 'Viewer'
@@ -60,6 +62,11 @@ export function ArticleDetail({ article, role, currentUserName, bookmarked, onBa
     if (!tag || article.tags.includes(tag)) return
     if (await saveTags([...article.tags, tag])) setNewTag('')
   }
+  const addTaxonomyTag = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedTaxonomyTerm || article.tags.includes(selectedTaxonomyTerm)) return
+    if (await saveTags([...article.tags, selectedTaxonomyTerm])) setSelectedTaxonomyTerm('')
+  }
   const submitReview = async () => {
     const saved = await onStatusChange('Under review')
     if (saved) setEditing(false)
@@ -75,7 +82,7 @@ export function ArticleDetail({ article, role, currentUserName, bookmarked, onBa
       <section className="comments-section"><div className="section-title-row"><div><h2>Discussion <span>{article.comments?.length ?? 0}</span></h2><p>Share context or ask the owner a question.</p></div></div><div className="comment-compose"><div className="profile-avatar">{currentUserName.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'}</div><input value={comment} onChange={(event) => setComment(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitComment() }} placeholder="Write a comment or @mention a teammate…" aria-label="Write a comment" /><button type="button" onClick={() => void submitComment()} aria-label="Post comment"><Send size={15} /></button></div>{article.comments?.map((item) => <article className="comment-row" key={item.id}><div className="profile-avatar">{item.author.split(' ').map((part) => part[0]).join('').slice(0, 2)}</div><div><p><strong>{item.author}</strong><span>{item.createdAt}</span></p><div>{item.body}</div></div></article>)}</section>
     </article>
     <aside className="article-sidebar"><div className="article-actions-panel"><div className="eyebrow">ARTICLE ACTIONS</div>{canEdit && <button type="button" onClick={() => setEditing(true)}><Pencil size={15} />Edit article</button>}{article.status === 'Draft' && canEdit && <button type="button" onClick={() => void onStatusChange('Under review')}><ShieldCheck size={15} />Request review</button>}{article.status === 'Under review' && canReview && <button type="button" className="publish-action" onClick={() => void onStatusChange('Published')}><Check size={15} />Approve & publish</button>}{canEdit && <button type="button" onClick={() => setShowHistory((value) => !value)}><GitCompare size={15} />Version history <span>{versions.length}</span></button>}{canReview && article.status === 'Published' && <button type="button" onClick={() => void onStatusChange('Archived')}><Clock3 size={15} />Archive article</button>}{role === 'Super Admin' && <button type="button" className="article-delete-action" onClick={() => { if (window.confirm(`Permanently delete “${article.title}”?`)) void onDelete() }}><Trash2 size={15} />Delete article</button>}</div>
-      <div className="article-meta-panel"><h2>About this article</h2><dl><div><dt>Owner</dt><dd>{article.owner}</dd></div><div><dt>Space</dt><dd>{article.space}</dd></div><div><dt>Category</dt><dd>{article.category}</dd></div><div><dt>Review due</dt><dd>{article.reviewDue || 'Not scheduled'}</dd></div><div><dt>Views</dt><dd>{article.views}</dd></div></dl><div className="article-tags">{article.tags.map((tag) => <span className="article-tag" key={tag}><span>#{tag}</span>{canEdit && <button type="button" title={`Remove #${tag}`} aria-label={`Remove #${tag}`} onClick={() => void saveTags(article.tags.filter((item) => item !== tag))}><X size={11} /></button>}</span>)}</div>{canEdit && <form className="article-tag-form" onSubmit={(event) => void addTag(event)}><input value={newTag} onChange={(event) => setNewTag(event.target.value)} aria-label="Add article tag" placeholder="Add tag" /><button type="submit" disabled={!newTag.trim()} aria-label="Add tag"><Check size={13} /></button></form>}{tagNotice && <p className="article-tag-notice" role="alert">{tagNotice}</p>}</div>
+      <div className="article-meta-panel"><h2>About this article</h2><dl><div><dt>Owner</dt><dd>{article.owner}</dd></div><div><dt>Space</dt><dd>{article.space}</dd></div><div><dt>Category</dt><dd>{article.category}</dd></div><div><dt>Review due</dt><dd>{article.reviewDue || 'Not scheduled'}</dd></div><div><dt>Views</dt><dd>{article.views}</dd></div></dl><div className="article-tags">{article.tags.map((tag) => <span className="article-tag" key={tag}><span>#{tag}</span>{canEdit && <button type="button" title={`Remove #${tag}`} aria-label={`Remove #${tag}`} onClick={() => void saveTags(article.tags.filter((item) => item !== tag))}><X size={11} /></button>}</span>)}</div>{canEdit && taxonomyTerms.some((term) => !article.tags.includes(term)) && <form className="article-tag-form" onSubmit={(event) => void addTaxonomyTag(event)}><label className="sr-only" htmlFor="article-taxonomy-tag">Choose a shared taxonomy tag</label><select id="article-taxonomy-tag" value={selectedTaxonomyTerm} onChange={(event) => setSelectedTaxonomyTerm(event.target.value)}><option value="">Choose a shared tag</option>{taxonomyTerms.filter((term) => !article.tags.includes(term)).map((term) => <option key={term} value={term}>#{term}</option>)}</select><button type="submit" disabled={!selectedTaxonomyTerm} aria-label="Add selected taxonomy tag"><Check size={13} /></button></form>}{canEdit && <form className="article-tag-form" onSubmit={(event) => void addTag(event)}><label className="sr-only" htmlFor="article-custom-tag">Add a custom article tag</label><input id="article-custom-tag" value={newTag} onChange={(event) => setNewTag(event.target.value)} aria-label="Add article tag" placeholder="Add custom tag" /><button type="submit" disabled={!newTag.trim()} aria-label="Add custom tag"><Check size={13} /></button></form>}{tagNotice && <p className="article-tag-notice" role="alert">{tagNotice}</p>}</div>
       {showHistory && <div className="article-history-panel"><div className="panel-heading"><h2>Version history</h2><span>{versions.length} saved</span></div>{versions.length === 0 ? <p className="empty-state">Save a version while editing to start a history.</p> : <>{versions.map((version) => <button className={`version-row${compareVersion === version.id ? ' selected' : ''}`} key={version.id} onClick={() => setCompareVersion(version.id)} type="button"><span><strong>{version.author}</strong><small>{version.savedAt}</small></span><span>{version.status}</span></button>)}{comparison && <div className="version-diff"><div className="diff-heading">Current vs {comparison.savedAt}</div>{diffLines(comparison.body, body).slice(0, 18).map((part, index) => <div className={`diff-line${part.added ? ' added' : part.removed ? ' removed' : ''}`} key={`${index}-${part.value}`}>{part.added ? '+ ' : part.removed ? '− ' : '  '}{part.value}</div>)}<button className="restore-action" type="button" onClick={() => void onRestoreVersion(comparison)}><RotateCcw size={13} />Restore this version</button></div>}</>}</div>}
       <div className="review-note"><Clock3 size={15} /><span><strong>Keep it current</strong><small>Review every 6 months so this stays useful.</small></span></div>
     </aside></div>

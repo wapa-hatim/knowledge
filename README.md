@@ -23,9 +23,9 @@ Atlas is a shared knowledge workspace. Sign in at `/`, then use the workspace na
 
 ### Spaces and membership
 
-A space is the access boundary for articles, questions, and uploaded files. A user must be an active workspace member and have membership in the relevant space to use its protected data. Super Admins can manage the workspace; space membership is stored in `space_members`.
+A space controls access to articles, questions, and uploaded files. Newly created spaces are workspace-visible: any active signed-in workspace user can read and contribute there. The access migration also opens existing app-created spaces while leaving the built-in seeded spaces unchanged. Other member-only spaces continue to require a `space_members` entry. Anonymous users cannot access either kind of space. Super Admins can manage the workspace.
 
-When inviting someone, choose the specific space they need or **All spaces**. A user who is not a member may see row-level security (RLS) errors when commenting, voting, bookmarking, or uploading. Fix the membership rather than weakening the RLS policies.
+When inviting someone, choose the specific space they need or **All spaces**. If an action in a member-only space returns a row-level security (RLS) error, confirm the user has membership in that space rather than weakening the RLS policies.
 
 ### Articles
 
@@ -40,11 +40,11 @@ When inviting someone, choose the specific space they need or **All spaces**. A 
 These are different concepts in the current app:
 
 - **Category** is an article's primary filing label inside one space, such as Runbooks or Guides. The same category name may exist in more than one space.
-- **Article tags** are a list of labels on an article. They can appear in article details and search, but the current article creation/editing screens do not provide a complete tag-management workflow.
+- **Article tags** are labels stored on an article and shown in search. In article details, editors can select an existing shared taxonomy term or add a custom tag, then remove tags individually.
 - **Taxonomy & entities** in **Formats & models** is currently a workspace-wide vocabulary list. Add consistent terms for concepts such as product names, systems, or teams. The form trims whitespace, removes a leading `#`, and stores the term in lowercase.
 - Super Admins and Space Admins can remove a term with the trash button beside it, then confirm. Removing a term also removes any article-to-term links. Other roles can view the shared list but do not get add/remove controls.
 
-Important: adding a taxonomy term does not currently attach it to an article, create entity relationships, or automatically generate article tags. The hub displays the vocabulary and retrieval-readiness counts, but a full taxonomy-to-content workflow is not implemented yet. Taxonomy writes are limited by the database to Super Admins and Space Admins.
+Important: adding a taxonomy term does not automatically attach it to articles or create entity relationships. Editors can explicitly select a shared term in article details to use it as an article tag. Super Admins and Space Admins can add or remove shared taxonomy terms in the hub.
 
 ### Files, sources, and AI readiness
 
@@ -80,7 +80,7 @@ Access is also checked by Supabase RLS, not only by which buttons the interface 
 
 | Symptom | What to check |
 | --- | --- |
-| `new row violates row-level security policy` | Confirm the signed-in user is Active and is a member of the selected space. Do not remove the membership checks as a workaround. |
+| `new row violates row-level security policy` | Confirm the signed-in user is Active. Member-only spaces also require a `space_members` row; newly created workspace-visible spaces do not. |
 | Upload says a space is unavailable | Select a space the user belongs to. Confirm the selected space exists in Supabase and the `knowledge-assets` bucket is configured. |
 | Invite request cannot reach `manage-workspace-user` | Confirm that Edge Function is deployed to the same Supabase project as `VITE_SUPABASE_URL`. Check its logs and Auth email delivery. |
 | A migration or `supabase db push` fails | Read the complete CLI error before retrying. Confirm the CLI is authenticated and linked to the intended project; do not assume the production database has the latest schema. |
