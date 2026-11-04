@@ -12,3 +12,7 @@ major_version = 15
 [storage]
 enabled = true
 file_size_limit = "100MiB"
+
+[auth.email.template.invite]
+subject = "Your invitation to Atlas Knowledge Workspace"
+content_path = "./supabase/templates/invite.html"

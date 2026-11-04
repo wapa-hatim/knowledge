@@ -104,7 +104,7 @@ Deno.serve(async (request) => {
     }
 
     const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: name },
+      data: { full_name: name, workspace_role: role },
       redirectTo,
     })
     if (inviteError || !inviteData.user) return response({ error: inviteError?.message ?? 'Supabase did not create an invitation.' }, 400)

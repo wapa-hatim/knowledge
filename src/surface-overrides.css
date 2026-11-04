@@ -231,8 +231,8 @@ select {
 
 .app-shell .page-content .eyebrow {
   color: #52665a;
-  font-size: 10px;
-  letter-spacing: .6px;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .app-shell .page-content :is(.metric-delta, .panel-heading p, .section-title-row p, .empty-state, .hub-empty, .hub-panel-heading p, .hub-record-copy small, .taxonomy-count, .taxonomy-permission-note, .taxonomy-error, .retrieval-stats span, .article-id, .article-crumb, .article-byline, .article-meta-panel dt, .article-meta-panel dd, .article-tag-notice, .comment-row, .comment-row p strong, .comment-row p span, .version-row, .version-row small, .diff-heading, .diff-line, .review-note small, .editor-footer > span, .autosave-state, .editor-mode-button, .search-facets > label, .facet-tip, .results-toolbar, .search-result-copy > span, .table-footer, .knowledge-type-card > span:not(.metric-icon)) {
@@ -252,4 +252,20 @@ select {
 .topbar .breadcrumb {
   color: #52645a;
   font-size: 12px;
+}
+
+.topbar .account-trigger-name,
+.account-menu-panel > span,
+.account-menu-panel button {
+  color: #465a51;
+  font-size: 12px;
+}
+
+.account-menu-panel button:last-child {
+  color: #a64b45;
+}
+
+.app-shell .page-content .article-tags span,
+.app-shell .page-content .taxonomy-term {
+  font-size: 11px;
 }

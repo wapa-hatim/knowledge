@@ -89,6 +89,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .password-change-form label { display: grid; gap: 7px; color: #53635d; font-size: 10px; font-weight: 600; }
 .password-change-form input { min-height: 42px; padding: 0 12px; border: 1px solid #e2e9e4; border-radius: 8px; background: #fff; color: #465a51; font-size: 11px; }
 .password-change-form input:focus { border-color: #9ec2ab; box-shadow: 0 0 0 3px rgba(102,157,120,.12); outline: none; }
+.password-change-input { position: relative; display: block; }
+.password-change-input input { width: 100%; padding-right: 45px; }
+.password-change-input .password-visibility-button { background: #fff; }
 .password-change-form .dialog-actions { margin-top: 4px; padding-top: 0; border-top: 0; }
 .login-password-field { position: relative; }
 .login-password-field input { width: 100%; padding-right: 45px; }

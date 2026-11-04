@@ -118,10 +118,11 @@ The main screens can be opened directly when signed in: `/dashboard`, `/library`
 
   ```sh
   supabase secrets set APP_BASE_URL=https://atlas-kms.vercel.app --project-ref qbgnmsjkehkrhwqlwxah
+  supabase config push --remote=qbgnmsjkehkrhwqlwxah
   supabase functions deploy manage-workspace-user
   ```
 
-  The function validates the caller’s Supabase session and Super Admin profile before inviting, updating, suspending/reactivating, or deleting a member. Its service-role key stays in the Edge Function environment and is never sent to the browser. Configure Supabase Auth email delivery, set the Auth **Site URL** to `https://atlas-kms.vercel.app`, and allow `https://atlas-kms.vercel.app/set-password` under **Redirect URLs**. Invitation emails redirect to that app route so new members can set a password inside Atlas.
+  The function validates the caller’s Supabase session and Super Admin profile before inviting, updating, suspending/reactivating, or deleting a member. Its service-role key stays in the Edge Function environment and is never sent to the browser. `supabase/config.toml` selects the Atlas-branded invite template at `supabase/templates/invite.html`; `config push` publishes it. Configure Supabase Auth email delivery, set the Auth **Site URL** to `https://atlas-kms.vercel.app`, and allow `https://atlas-kms.vercel.app/set-password` under **Redirect URLs**. Invitation emails use the secure confirmation link and redirect new members back to Atlas to set their password.
 
 The role is read from `public.profiles`. Create the first auth user before applying the migration or afterward; the migration backfills existing users, and the auth trigger creates profiles for future users. People, articles, spaces, Q&A, models, bookmarks, taxonomy, integrations, settings, and search gaps load from Supabase; the app no longer falls back to local demo records. Do not expose the database password or Supabase secret/service-role key to the browser.
 
