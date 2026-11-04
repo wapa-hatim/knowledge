@@ -6,6 +6,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Bold, Code2, Heading2, ImagePlus, Italic, List, ListOrdered, Save, Table2 } from 'lucide-react'
+import { Button } from '../../components/ui/Button'
 
 interface ArticleEditorProps {
   articleId: string
@@ -13,7 +14,7 @@ interface ArticleEditorProps {
   onAutosave: (body: string) => Promise<boolean>
   onSaveVersion: (body: string) => Promise<boolean>
   onCancel: () => void
-  onSubmitReview: () => void
+  onSubmitReview: () => Promise<void>
 }
 
 export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersion, onCancel, onSubmitReview }: ArticleEditorProps) {
@@ -82,6 +83,6 @@ export function ArticleEditor({ articleId, initialBody, onAutosave, onSaveVersio
       <div className="editor-toolbar-actions"><span className="autosave-state"><i className={saveState === 'saving' ? 'is-saving' : saveState === 'error' ? 'is-error' : ''} />{saveState === 'saving' ? 'Saving to Supabase…' : saveState === 'error' ? 'Save failed' : 'Saved to Supabase'}</span><button type="button" className={`editor-mode-button${sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Markdown</button><button type="button" className={`editor-mode-button${!sourceMode ? ' selected' : ''}`} onClick={toggleSource}>Visual</button></div>
     </div>
     {sourceMode ? <textarea className="markdown-source" aria-label="Markdown source" value={source} onChange={(event) => { const nextSource = event.target.value; setSource(nextSource); setSaveState('saving'); if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(() => { void onAutosave(nextSource).then((saved) => setSaveState(saved ? 'saved' : 'error')).catch(() => setSaveState('error')) }, 650) }} /> : <EditorContent editor={editor} className="tiptap-content" />}
-    <div className="editor-footer"><span>Changes sync to Supabase.</span><div><button className="ui-button ui-button-ghost ui-button-default" type="button" onClick={onCancel}>Cancel</button><button className="ui-button ui-button-outline ui-button-default" type="button" onClick={() => void saveVersion()}><Save size={14} />Save version</button><button className="ui-button ui-button-primary ui-button-default" type="button" onClick={onSubmitReview}>Submit for review</button></div></div>
+    <div className="editor-footer"><span>Changes sync to Supabase.</span><div><Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button><Button variant="outline" type="button" onClick={saveVersion} loadingText="Saving version…"><Save size={14} />Save version</Button><Button type="button" onClick={onSubmitReview} loadingText="Submitting for review…">Submit for review</Button></div></div>
   </section>
 }

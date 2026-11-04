@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpenText, Braces, CheckCircle2, CircleHelp, FileArchive, FileUp, Layers3, Network, Plus, SearchCheck, ShieldCheck, Tags, Trash2 } from 'lucide-react'
+import { ArrowRight, BookOpenText, Braces, CheckCircle2, CircleHelp, FileArchive, FileUp, Layers3, LoaderCircle, Network, Plus, SearchCheck, ShieldCheck, Tags, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, View } from '../../types'
 import { Button } from '../../components/ui/Button'
@@ -30,6 +30,7 @@ const knowledgeTypes = [
 export function KnowledgeModelsHub({ models, loading, assets, integrations, taxonomyTerms, canManageTaxonomy, onNavigate, onCreateArticle, onCreateAsset, onCreateSource, onAddTaxonomyTerm, onRemoveTaxonomyTerm }: KnowledgeModelsHubProps) {
   const [newTerm, setNewTerm] = useState('')
   const [taxonomyError, setTaxonomyError] = useState('')
+  const [isAddingTerm, setIsAddingTerm] = useState(false)
   const [pendingTerm, setPendingTerm] = useState<string | null>(null)
   const modelHighlights = [
     { label: 'Managed models', value: models.filter((model) => model.status === 'Managed').length, delta: 'From Supabase', icon: Layers3, tone: 'tone-mint' },
@@ -39,22 +40,30 @@ export function KnowledgeModelsHub({ models, loading, assets, integrations, taxo
   const submitTerm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const term = newTerm.trim().replace(/^#/, '').toLowerCase()
-    if (!term || !canManageTaxonomy) return
+    if (!term || !canManageTaxonomy || isAddingTerm) return
     setTaxonomyError('')
-    const error = await onAddTaxonomyTerm(term)
-    if (error) {
-      setTaxonomyError(error)
-      return
+    setIsAddingTerm(true)
+    try {
+      const error = await onAddTaxonomyTerm(term)
+      if (error) {
+        setTaxonomyError(error)
+        return
+      }
+      setNewTerm('')
+    } finally {
+      setIsAddingTerm(false)
     }
-    setNewTerm('')
   }
   const removeTerm = async (term: string) => {
     if (!window.confirm(`Remove #${term} from the shared taxonomy? Any article links to this term will also be removed.`)) return
     setTaxonomyError('')
     setPendingTerm(term)
-    const error = await onRemoveTaxonomyTerm(term)
-    setPendingTerm(null)
-    if (error) setTaxonomyError(error)
+    try {
+      const error = await onRemoveTaxonomyTerm(term)
+      if (error) setTaxonomyError(error)
+    } finally {
+      setPendingTerm(null)
+    }
   }
 
   return <section className="page-section">
@@ -95,9 +104,9 @@ export function KnowledgeModelsHub({ models, loading, assets, integrations, taxo
         {loading ? <div className="hub-empty" role="status">Loading connected sources…</div> : integrations.length ? <div className="hub-record-list">{integrations.map((integration) => <div className="hub-record-row" key={integration.id}><span className="hub-record-icon hub-source"><Network size={16} /></span><span className="hub-record-copy"><strong>{integration.name}</strong><small>{integration.category} · {integration.lastSynced}</small></span><span className={`status-pill${integration.connected ? ' status-published' : ' status-draft'}`}>{integration.connected ? 'Connected' : 'Setup needed'}</span></div>)}</div> : <div className="hub-empty">No live connectors configured. Add GitHub releases, an OpenAPI catalog, or a status feed.</div>}
       </section>
       <section className="panel knowledge-hub-panel taxonomy-panel" id="taxonomy-panel"><div className="hub-panel-heading"><div><div className="eyebrow">EXPLICIT METADATA</div><h2>Taxonomy & entities</h2><p>Shared terms help connect knowledge across spaces.</p></div><span className="taxonomy-count">{taxonomyTerms.length} terms</span></div>
-        {canManageTaxonomy ? <form className="taxonomy-form" onSubmit={(event) => void submitTerm(event)}><label className="sr-only" htmlFor="new-taxonomy-term">Add taxonomy term</label><input id="new-taxonomy-term" value={newTerm} onChange={(event) => setNewTerm(event.target.value)} placeholder="Add a tag or entity" /><Button size="small" type="submit" disabled={!newTerm.trim()}><Plus size={14} />Add term</Button></form> : <p className="taxonomy-permission-note">Only Super Admins and Space Admins can manage shared terms.</p>}
+        {canManageTaxonomy ? <form className="taxonomy-form" onSubmit={(event) => void submitTerm(event)}><label className="sr-only" htmlFor="new-taxonomy-term">Add taxonomy term</label><input id="new-taxonomy-term" value={newTerm} onChange={(event) => setNewTerm(event.target.value)} placeholder="Add a tag or entity" disabled={isAddingTerm} /><Button size="small" type="submit" isLoading={isAddingTerm} loadingText="Adding…" disabled={!newTerm.trim()}><Plus size={14} />Add term</Button></form> : <p className="taxonomy-permission-note">Only Super Admins and Space Admins can manage shared terms.</p>}
         {taxonomyError && <p className="taxonomy-error" role="alert">{taxonomyError}</p>}
-        <div className="taxonomy-terms">{taxonomyTerms.map((term) => <span className="taxonomy-term" key={term}><span>#{term}</span>{canManageTaxonomy && <button type="button" title={`Remove #${term}`} aria-label={`Remove #${term}`} disabled={pendingTerm === term} onClick={() => void removeTerm(term)}><Trash2 size={12} /></button>}</span>)}</div>
+        <div className="taxonomy-terms">{taxonomyTerms.map((term) => <span className="taxonomy-term" key={term}><span>#{term}</span>{canManageTaxonomy && <button type="button" title={`Remove #${term}`} aria-label={`Remove #${term}`} disabled={pendingTerm !== null} aria-busy={pendingTerm === term || undefined} onClick={() => void removeTerm(term)}>{pendingTerm === term ? <LoaderCircle className="ui-button-spinner" size={12} /> : <Trash2 size={12} />}</button>}</span>)}</div>
       </section>
       <section className="panel knowledge-hub-panel ai-context-panel"><div className="hub-panel-heading"><div><div className="eyebrow">AI CONTEXT</div><h2>Retrieval readiness</h2><p>Context and source coverage for grounded answers.</p></div><span className="hub-ai-icon"><SearchCheck size={17} /></span></div><div className="retrieval-stats"><div><strong>{models.length + assets.length + integrations.length}</strong><span>knowledge records</span></div><div><strong>{taxonomyTerms.length}</strong><span>search terms</span></div><div><strong>Not configured</strong><span>vector retrieval</span></div></div><div className="asset-note">Vector embeddings, indexing pipelines, and cited AI answers require a connected search and generation service.</div></section>
     </div>

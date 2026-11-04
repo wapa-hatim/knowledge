@@ -24,8 +24,24 @@
 }
 
 .table-action-button:disabled {
+  position: relative;
   cursor: wait;
-  opacity: .5;
+  color: transparent;
+}
+
+.table-action-button:disabled svg {
+  visibility: hidden;
+}
+
+.table-action-button:disabled::after {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #718078;
+  border-right-color: transparent;
+  border-radius: 50%;
+  content: '';
+  animation: auth-spin .8s linear infinite;
 }
 
 .table-action-danger:hover:not(:disabled) {

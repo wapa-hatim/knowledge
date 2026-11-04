@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, BookOpen, FileText, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FileText, LoaderCircle, Pencil, Plus, Search, Trash2, Users } from 'lucide-react'
 import type { Article, KnowledgeSpace, Role } from '../../types'
 import { Button } from '../../components/ui/Button'
 import './workspace-pages.css'
@@ -26,22 +26,29 @@ export function SpacesView({ spaces, articles, role, selectedSpaceName, createOp
   const [newSpaceDescription, setNewSpaceDescription] = useState('')
   const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null)
   const [spaceError, setSpaceError] = useState('')
+  const [isSavingSpace, setIsSavingSpace] = useState(false)
+  const [deletingSpaceName, setDeletingSpaceName] = useState<string | null>(null)
   const spaceArticles = useMemo(() => articles.filter((article) => article.space === selectedSpace?.name && (selectedCategory === 'All categories' || article.category === selectedCategory) && (!query || `${article.title} ${article.summary} ${article.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase()))), [articles, query, selectedCategory, selectedSpace])
   const submitSpace = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!newSpaceName.trim()) return
+    if (!newSpaceName.trim() || isSavingSpace) return
     setSpaceError('')
     const updatedSpace: KnowledgeSpace = { ...(editingSpace ?? { color: 'green', articleCount: 0, owner: 'Space owner', categories: [] }), name: newSpaceName.trim(), description: newSpaceDescription.trim() }
-    const error = await onSaveSpace(updatedSpace, editingSpace?.name ?? null)
-    if (error) {
-      setSpaceError(error)
-      return
+    setIsSavingSpace(true)
+    try {
+      const error = await onSaveSpace(updatedSpace, editingSpace?.name ?? null)
+      if (error) {
+        setSpaceError(error)
+        return
+      }
+      setNewSpaceName('')
+      setNewSpaceDescription('')
+      setEditingSpace(null)
+      onSelectSpace(updatedSpace.name)
+      if (!editingSpace) onCreateOpenChange(false)
+    } finally {
+      setIsSavingSpace(false)
     }
-    setNewSpaceName('')
-    setNewSpaceDescription('')
-    setEditingSpace(null)
-    onSelectSpace(updatedSpace.name)
-    if (!editingSpace) onCreateOpenChange(false)
   }
   const openSpaceEditor = (space: KnowledgeSpace) => {
     setEditingSpace(space)
@@ -50,10 +57,15 @@ export function SpacesView({ spaces, articles, role, selectedSpaceName, createOp
     setSpaceError('')
   }
   const removeSpace = async (space: KnowledgeSpace) => {
-    if (!window.confirm(`Permanently delete “${space.name}” and all articles, assets, categories, and questions inside it?`)) return
+    if (deletingSpaceName || !window.confirm(`Permanently delete “${space.name}” and all articles, assets, categories, and questions inside it?`)) return
     setSpaceError('')
-    const error = await onDeleteSpace(space.name)
-    if (error) setSpaceError(error)
+    setDeletingSpaceName(space.name)
+    try {
+      const error = await onDeleteSpace(space.name)
+      if (error) setSpaceError(error)
+    } finally {
+      setDeletingSpaceName(null)
+    }
   }
 
   if (selectedSpace) return <section className="page-section spaces-page">
@@ -67,6 +79,6 @@ export function SpacesView({ spaces, articles, role, selectedSpaceName, createOp
 
   return <section className="page-section spaces-page"><div className="page-heading"><div><div className="eyebrow">A PLACE FOR EVERY KIND OF KNOWLEDGE</div><h1>Explore spaces</h1><p>Shared, organized knowledge for every team and discipline.</p></div>{role === 'Super Admin' && <Button onClick={() => onCreateOpenChange(true)}><Plus size={15} />Create space</Button>}</div><label className="results-search space-search"><Search size={17} /><input placeholder="Find a space or team" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="spaces-grid">{spaces.filter((space) => `${space.name} ${space.description} ${space.categories.join(' ')}`.toLowerCase().includes(query.toLowerCase())).map((space) => {
     const count = articles.filter((article) => article.space === space.name).length
-    return <article className="space-card" key={space.name}><div className="space-card-top"><div className={`space-illustration space-${space.color}`}><BookOpen size={20} /></div><span className="space-member-count"><Users size={13} />{space.articleCount} articles</span></div><h2>{space.name}</h2><p>{space.description || 'No description'}</p><div className="space-card-categories">{space.categories.slice(0, 3).map((category) => <span key={category}>{category}</span>)}</div><div className="space-card-footer"><span><FileText size={13} />{count} articles</span><span>Owner: {space.owner}</span><div className="space-card-actions"><button type="button" onClick={() => onSelectSpace(space.name)} aria-label={`Browse ${space.name}`} title="Browse space"><ArrowRight size={15} /></button>{role === 'Super Admin' && <><button type="button" onClick={() => openSpaceEditor(space)} aria-label={`Edit ${space.name}`} title="Edit space"><Pencil size={14} /></button><button type="button" onClick={() => void removeSpace(space)} aria-label={`Delete ${space.name}`} title="Delete space"><Trash2 size={14} /></button></>}</div></div></article>
-  })}</div>{spaceError && <div className="admin-data-error" role="alert">{spaceError}</div>}{(createOpen || editingSpace) && <div className="admin-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { onCreateOpenChange(false); setEditingSpace(null) } }}><form className="admin-modal" onSubmit={submitSpace}><div className="panel-heading"><div><h2>{editingSpace ? 'Edit space' : 'Create a space'}</h2><p>{editingSpace ? 'Update this space in Supabase.' : 'Create a workspace space for shared knowledge.'}</p></div><button type="button" className="dialog-close" onClick={() => { onCreateOpenChange(false); setEditingSpace(null) }} aria-label="Close space dialog">×</button></div><label>Space name<input required value={newSpaceName} onChange={(event) => setNewSpaceName(event.target.value)} placeholder="e.g. Legal" /></label><label>Description<input value={newSpaceDescription} onChange={(event) => setNewSpaceDescription(event.target.value)} placeholder="What belongs here?" /></label>{spaceError && <div className="admin-data-error" role="alert">{spaceError}</div>}<div className="question-form-actions"><Button variant="ghost" type="button" onClick={() => { onCreateOpenChange(false); setEditingSpace(null) }}>Cancel</Button><Button type="submit">{editingSpace ? 'Save changes' : <><Plus size={14} />Create space</>}</Button></div></form></div>}</section>
+    return <article className="space-card" key={space.name}><div className="space-card-top"><div className={`space-illustration space-${space.color}`}><BookOpen size={20} /></div><span className="space-member-count"><Users size={13} />{space.articleCount} articles</span></div><h2>{space.name}</h2><p>{space.description || 'No description'}</p><div className="space-card-categories">{space.categories.slice(0, 3).map((category) => <span key={category}>{category}</span>)}</div><div className="space-card-footer"><span><FileText size={13} />{count} articles</span><span>Owner: {space.owner}</span><div className="space-card-actions"><button type="button" onClick={() => onSelectSpace(space.name)} aria-label={`Browse ${space.name}`} title="Browse space"><ArrowRight size={15} /></button>{role === 'Super Admin' && <><button type="button" onClick={() => openSpaceEditor(space)} aria-label={`Edit ${space.name}`} title="Edit space"><Pencil size={14} /></button><button type="button" disabled={deletingSpaceName !== null} aria-busy={deletingSpaceName === space.name || undefined} onClick={() => void removeSpace(space)} aria-label={`Delete ${space.name}`} title="Delete space">{deletingSpaceName === space.name ? <LoaderCircle className="ui-button-spinner" size={14} /> : <Trash2 size={14} />}</button></>}</div></div></article>
+  })}</div>{spaceError && <div className="admin-data-error" role="alert">{spaceError}</div>}{(createOpen || editingSpace) && <div className="admin-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !isSavingSpace) { onCreateOpenChange(false); setEditingSpace(null) } }}><form className="admin-modal" onSubmit={submitSpace}><div className="panel-heading"><div><h2>{editingSpace ? 'Edit space' : 'Create a space'}</h2><p>{editingSpace ? 'Update this space in Supabase.' : 'Create a workspace space for shared knowledge.'}</p></div><button type="button" className="dialog-close" onClick={() => { onCreateOpenChange(false); setEditingSpace(null) }} aria-label="Close space dialog" disabled={isSavingSpace}>×</button></div><label>Space name<input required value={newSpaceName} onChange={(event) => setNewSpaceName(event.target.value)} placeholder="e.g. Legal" disabled={isSavingSpace} /></label><label>Description<input value={newSpaceDescription} onChange={(event) => setNewSpaceDescription(event.target.value)} placeholder="What belongs here?" disabled={isSavingSpace} /></label>{spaceError && <div className="admin-data-error" role="alert">{spaceError}</div>}<div className="question-form-actions"><Button variant="ghost" type="button" onClick={() => { onCreateOpenChange(false); setEditingSpace(null) }} disabled={isSavingSpace}>Cancel</Button><Button type="submit" isLoading={isSavingSpace} loadingText={editingSpace ? 'Saving space…' : 'Creating space…'}>{editingSpace ? 'Save changes' : <><Plus size={14} />Create space</>}</Button></div></form></div>}</section>
 }
