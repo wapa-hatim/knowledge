@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const appBaseUrl = Deno.env.get('APP_BASE_URL')?.trim().replace(/\/+$/, '') ?? ''
 const roles = ['Super Admin', 'Space Admin', 'Author', 'Reviewer', 'Viewer'] as const
 const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, apikey, x-client-info, content-type',
@@ -82,6 +83,14 @@ Deno.serve(async (request) => {
     const space = member.space?.trim() || 'All spaces'
     if (!email || !email.includes('@')) return response({ error: 'Enter a valid work email.' }, 400)
     if (!roles.includes(role as typeof roles[number]) || role === 'Super Admin') return response({ error: 'Choose a permitted member role.' }, 400)
+    if (!appBaseUrl) return response({ error: 'Set APP_BASE_URL to the Atlas application URL before inviting members.' }, 500)
+
+    let redirectTo: string
+    try {
+      redirectTo = new URL('/set-password', `${appBaseUrl}/`).toString()
+    } catch {
+      return response({ error: 'APP_BASE_URL must be a valid Atlas application URL.' }, 500)
+    }
 
     let targetSpaceIds: string[] = []
     if (space !== 'All spaces') {
@@ -94,7 +103,10 @@ Deno.serve(async (request) => {
       targetSpaceIds = (allSpaces ?? []).map((spaceRow) => spaceRow.id)
     }
 
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } })
+    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+      data: { full_name: name },
+      redirectTo,
+    })
     if (inviteError || !inviteData.user) return response({ error: inviteError?.message ?? 'Supabase did not create an invitation.' }, 400)
 
     const { error: profileError } = await admin.from('profiles').upsert({

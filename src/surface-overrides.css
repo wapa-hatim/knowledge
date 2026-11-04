@@ -210,3 +210,46 @@ select {
   border-color: color-mix(in srgb, #dfd4e8 60%, transparent);
   background-color: color-mix(in srgb, #f2edf6 58%, transparent);
 }
+
+.app-shell .page-content small {
+  color: #4f6257;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.app-shell .page-content input:not([type='checkbox']):not([type='radio']),
+.app-shell .page-content select,
+.app-shell .page-content textarea {
+  font-size: 12px;
+}
+
+.app-shell .page-content input::placeholder,
+.app-shell .page-content textarea::placeholder {
+  color: #5f7066;
+  opacity: 1;
+}
+
+.app-shell .page-content .eyebrow {
+  color: #52665a;
+  font-size: 10px;
+  letter-spacing: .6px;
+}
+
+.app-shell .page-content :is(.metric-delta, .panel-heading p, .section-title-row p, .empty-state, .hub-empty, .hub-panel-heading p, .hub-record-copy small, .taxonomy-count, .taxonomy-permission-note, .taxonomy-error, .retrieval-stats span, .article-id, .article-crumb, .article-byline, .article-meta-panel dt, .article-meta-panel dd, .article-tag-notice, .comment-row, .comment-row p strong, .comment-row p span, .version-row, .version-row small, .diff-heading, .diff-line, .review-note small, .editor-footer > span, .autosave-state, .editor-mode-button, .search-facets > label, .facet-tip, .results-toolbar, .search-result-copy > span, .table-footer, .knowledge-type-card > span:not(.metric-icon)) {
+  color: #52645a;
+  font-size: 11px;
+}
+
+.app-shell .page-content .status-pill {
+  font-size: 10px;
+}
+
+.sidebar :is(.sidebar-label, .workspace-name small, .sidebar-profile small, .space-link > span) {
+  color: #c6d8d0;
+  font-size: 11px;
+}
+
+.topbar .breadcrumb {
+  color: #52645a;
+  font-size: 12px;
+}

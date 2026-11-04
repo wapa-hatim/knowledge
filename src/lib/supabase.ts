@@ -817,6 +817,15 @@ export async function manageWorkspaceUser(
   if (!supabase) return { data: null, error: 'Supabase is not configured.' }
   const { data, error } = await supabase.functions.invoke('manage-workspace-user', { body: { action, ...payload } })
   if (!error) return { data, error: null }
+  const responseContext = error?.context ?? null
+  if (responseContext instanceof Response) {
+    const status = responseContext.status
+    const responseBody = await responseContext.clone().json().catch(() => null) as { error?: unknown } | null
+    if (typeof responseBody?.error === 'string') {
+      return { data: null, error: `Workspace user request failed (${status}): ${responseBody.error}` }
+    }
+    return { data: null, error: `Workspace user request failed with status ${status}. Check the manage-workspace-user Edge Function logs.` }
+  }
   const cannotReachFunction = error.name === 'FunctionsFetchError' || error.message.includes('Failed to send a request')
   return {
     data: null,
