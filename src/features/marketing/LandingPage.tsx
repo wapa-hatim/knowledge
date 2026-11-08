@@ -1,177 +1,85 @@
-import { ArrowRight, BookOpenCheck, BriefcaseBusiness, FileStack, FolderKanban, Layers3, Search, ShieldCheck, Sparkles, Users, Workflow } from 'lucide-react'
+import { ArrowRight, BookOpenCheck, BookOpenText, FileStack, FolderKanban, MessageSquareText, Search, ShieldCheck, Sparkles, Users, Workflow } from 'lucide-react'
+import './landing-page.css'
 
 interface LandingPageProps {
   onOpenLogin: () => void
 }
 
 const features = [
-  {
-    icon: FileStack,
-    title: 'Knowledge library',
-    description: 'Turn scattered documentation into a searchable, organized library of trusted articles and sources.',
-  },
-  {
-    icon: FolderKanban,
-    title: 'Spaces & categories',
-    description: 'Organize knowledge by team, function, or project with scoped spaces and structured categories.',
-  },
-  {
-    icon: Workflow,
-    title: 'Review workflow',
-    description: 'Move drafts through review and approval with clear status tracking from draft to published.',
-  },
-  {
-    icon: Users,
-    title: 'Team collaboration',
-    description: 'Invite members, assign roles, and align your team around the right answer at the right time.',
-  },
-  {
-    icon: Search,
-    title: 'Search & discovery',
-    description: 'Surface the right content fast through search, tags, taxonomy, and article metadata.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Secure access',
-    description: 'Govern work with role-based access, audit history, and workspace rules that protect sensitive content.',
-  },
+  { icon: FileStack, title: 'Knowledge library', description: 'Create Markdown articles, organize them by space and category, and keep a restorable version history.' },
+  { icon: FolderKanban, title: 'Spaces for every team', description: 'Give each team a focused home for its articles, questions, and files, with access managed by membership.' },
+  { icon: Workflow, title: 'Review & publishing', description: 'Move content from draft through review to published, so teams know what is ready to rely on.' },
+  { icon: MessageSquareText, title: 'Questions & answers', description: 'Ask questions in a space, contribute answers, vote, and let reviewers verify helpful responses.' },
+  { icon: Search, title: 'Find what you need', description: 'Browse and search workspace articles, refine by space, and use tags and categories to aid discovery.' },
+  { icon: ShieldCheck, title: 'Governed access', description: 'Use workspace roles, space membership, Supabase row-level security, and an audit trail to support accountable collaboration.' },
 ]
 
 const workflow = [
-  'Create or invite teammates into a shared workspace.',
-  'Organize content by space, category, and tag.',
-  'Draft articles, upload files, and define knowledge models.',
-  'Review, publish, and keep information current over time.',
+  { title: 'Set up your workspace', description: 'Admins create spaces and invite teammates with an appropriate role and access.' },
+  { title: 'Capture knowledge', description: 'Authors write articles, add categories and tags, or upload files to a space.' },
+  { title: 'Review together', description: 'Submit drafts for review; reviewers and admins help verify and publish content.' },
+  { title: 'Discover and improve', description: 'Search the library, bookmark useful articles, ask questions, and use search gaps to spot missing answers.' },
 ]
 
-const roles = ['Super Admin', 'Space Admin', 'Author', 'Reviewer', 'Viewer']
+const roles = [
+  { name: 'Super Admin', detail: 'Workspace-wide administration' },
+  { name: 'Space Admin', detail: 'Manage assigned spaces' },
+  { name: 'Author', detail: 'Create and edit knowledge' },
+  { name: 'Reviewer', detail: 'Review content and answers' },
+  { name: 'Viewer', detail: 'Read and participate' },
+]
 
 export function LandingPage({ onOpenLogin }: LandingPageProps) {
   return (
     <main className="atlas-landing-page">
       <header className="atlas-header">
-        <div className="atlas-brand">
-          <div className="brand-mark brand-mark-large">
-            <BookOpenCheck size={18} />
-          </div>
-          <span>Atlas</span>
-        </div>
-
+        <a className="atlas-brand" href="#home" aria-label="Atlas home">
+          <span className="atlas-brand-mark"><BookOpenCheck size={19} /></span>
+          <span>atlas<span className="atlas-brand-period">.</span></span>
+        </a>
         <nav className="atlas-nav" aria-label="Main navigation">
           <a href="#overview">Overview</a>
           <a href="#how-it-works">How it works</a>
           <a href="#roles">Roles</a>
         </nav>
-
-        <button type="button" className="atlas-header-button" onClick={onOpenLogin}>
-          Sign in
-        </button>
+        <button type="button" className="atlas-header-button" onClick={onOpenLogin}>Sign in <ArrowRight size={15} /></button>
       </header>
 
-      <section className="atlas-hero">
+      <section id="home" className="atlas-hero">
         <div className="atlas-hero-copy">
-          <div className="eyebrow eyebrow-landing">
-            <span className="eyebrow-dot" />Atlas knowledge workspace
-          </div>
-          <h1>Trusted knowledge for the way your team actually works.</h1>
-          <p>
-            Atlas brings your internal docs, spaces, reviews, Q&amp;A, and team knowledge into one secure,
-            searchable workspace designed for clarity and momentum.
-          </p>
-
+          <div className="atlas-eyebrow"><span />A shared knowledge workspace</div>
+          <h1>Make your team’s knowledge easy to trust and easy to find.</h1>
+          <p>Atlas brings articles, team spaces, review workflows, and questions &amp; answers together in one secure workspace—so useful knowledge can keep moving with your team.</p>
           <div className="atlas-cta-row">
-            <button type="button" className="ui-button ui-button-primary" onClick={onOpenLogin}>
-              Enter workspace <ArrowRight size={16} />
-            </button>
-            <a className="ui-button ui-button-outline" href="#overview">
-              Explore platform
-            </a>
+            <button type="button" className="atlas-button atlas-button-primary" onClick={onOpenLogin}>Enter workspace <ArrowRight size={16} /></button>
+            <a className="atlas-button atlas-button-secondary" href="#overview">Explore Atlas</a>
           </div>
-
-          <div className="atlas-proof-row">
-            <div>
-              <strong>5</strong>
-              <span>Workspace roles</span>
-            </div>
-            <div>
-              <strong>24/7</strong>
-              <span>Shared access</span>
-            </div>
-            <div>
-              <strong>100%</strong>
-              <span>Team-centered</span>
-            </div>
-          </div>
+          <div className="atlas-hero-note"><ShieldCheck size={15} /><span>Workspace roles and space membership help control who can read and contribute.</span></div>
         </div>
 
-        <div className="atlas-hero-panel" aria-label="Platform overview">
-          <div className="hero-panel-top">
-            <div>
-              <span className="panel-chip">Workspace</span>
-              <h2>Atlas overview</h2>
-            </div>
-            <Sparkles size={18} />
+        <div className="atlas-product-card" aria-label="Atlas workspace feature preview">
+          <div className="atlas-product-topline"><div className="atlas-product-logo"><BookOpenText size={17} /></div><div><span className="atlas-product-label">YOUR TEAM’S KNOWLEDGE</span><strong>One connected workspace</strong></div><Sparkles className="atlas-sparkle" size={18} /></div>
+          <div className="atlas-product-search"><Search size={15} /><span>Search trusted articles, spaces, and answers</span><kbd>⌘ K</kbd></div>
+          <div className="atlas-product-list">
+            <div className="atlas-product-row"><span className="atlas-row-icon atlas-icon-green"><FileStack size={16} /></span><span className="atlas-row-copy"><strong>Knowledge library</strong><small>Articles, SOPs, guides, and version history</small></span><span className="atlas-row-status">PUBLISHED</span></div>
+            <div className="atlas-product-row"><span className="atlas-row-icon atlas-icon-gold"><FolderKanban size={16} /></span><span className="atlas-row-copy"><strong>Team spaces</strong><small>Knowledge organized around your teams</small></span><ArrowRight size={15} className="atlas-row-arrow" /></div>
+            <div className="atlas-product-row"><span className="atlas-row-icon atlas-icon-blue"><ShieldCheck size={16} /></span><span className="atlas-row-copy"><strong>Review queue</strong><small>Drafts move through a clear approval flow</small></span><span className="atlas-row-status atlas-status-review">IN REVIEW</span></div>
+            <div className="atlas-product-row"><span className="atlas-row-icon atlas-icon-lilac"><MessageSquareText size={16} /></span><span className="atlas-row-copy"><strong>Questions &amp; answers</strong><small>Share context and verify useful answers</small></span><ArrowRight size={15} className="atlas-row-arrow" /></div>
           </div>
-
-          <div className="panel-metric-grid">
-            <div className="mini-metric mini-metric-green">
-              <span>Articles</span>
-              <strong>1.2k+</strong>
-            </div>
-            <div className="mini-metric mini-metric-gold">
-              <span>Spaces</span>
-              <strong>18</strong>
-            </div>
-            <div className="mini-metric mini-metric-blue">
-              <span>Review queue</span>
-              <strong>8</strong>
-            </div>
-            <div className="mini-metric mini-metric-lilac">
-              <span>Answers</span>
-              <strong>96</strong>
-            </div>
-          </div>
-
-          <div className="hero-stack">
-            <div className="stack-row">
-              <div className="stack-icon stack-green"><FileStack size={15} /></div>
-              <div>
-                <strong>Knowledge library</strong>
-                <small>Search and browse trusted records</small>
-              </div>
-            </div>
-            <div className="stack-row">
-              <div className="stack-icon stack-gold"><BriefcaseBusiness size={15} /></div>
-              <div>
-                <strong>Spaces</strong>
-                <small>Update working knowledge by team</small>
-              </div>
-            </div>
-            <div className="stack-row">
-              <div className="stack-icon stack-blue"><Layers3 size={15} /></div>
-              <div>
-                <strong>Formats &amp; models</strong>
-                <small>Standardize content and sources</small>
-              </div>
-            </div>
-          </div>
+          <div className="atlas-product-footer"><span className="atlas-presence-dots"><i /><i /><i /></span><span>Built for shared understanding</span><span className="atlas-footer-secure"><ShieldCheck size={13} /> Access-aware</span></div>
         </div>
       </section>
 
       <section id="overview" className="atlas-section">
-        <div className="section-heading">
-          <div className="eyebrow eyebrow-landing">
-            <span className="eyebrow-dot" />Everything in one place
-          </div>
-          <h2>Built for how teams capture, share, and trust knowledge.</h2>
+        <div className="atlas-section-heading">
+          <div className="atlas-eyebrow"><span />The workspace, at a glance</div>
+          <h2>Everything your team needs to keep knowledge useful.</h2>
+          <p>From the first draft to a verified answer, Atlas gives knowledge a clear home and a collaborative lifecycle.</p>
         </div>
-
-        <div className="feature-grid">
+        <div className="atlas-feature-grid">
           {features.map(({ icon: Icon, title, description }) => (
-            <article key={title} className="feature-card">
-              <div className="feature-icon">
-                <Icon size={18} />
-              </div>
+            <article key={title} className="atlas-feature-card">
+              <span className="atlas-feature-icon"><Icon size={19} /></span>
               <h3>{title}</h3>
               <p>{description}</p>
             </article>
@@ -179,54 +87,41 @@ export function LandingPage({ onOpenLogin }: LandingPageProps) {
         </div>
       </section>
 
-      <section id="how-it-works" className="atlas-section atlas-steps-section">
-        <div className="section-heading narrow-heading">
-          <div className="eyebrow eyebrow-landing">
-            <span className="eyebrow-dot" />How Atlas works
-          </div>
-          <h2>A simple path from knowledge creation to confident decision-making.</h2>
+      <section id="how-it-works" className="atlas-section atlas-workflow-section">
+        <div className="atlas-section-heading">
+          <div className="atlas-eyebrow"><span />A clear knowledge lifecycle</div>
+          <h2>Capture it. Review it. Put it to work.</h2>
         </div>
-
-        <div className="steps-grid">
+        <div className="atlas-workflow-grid">
           {workflow.map((step, index) => (
-            <div key={step} className="step-card">
-              <span className="step-number">0{index + 1}</span>
-              <p>{step}</p>
-            </div>
+            <article key={step.title} className="atlas-workflow-card">
+              <span className="atlas-step-number">0{index + 1}</span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </article>
           ))}
         </div>
       </section>
 
-      <section id="roles" className="atlas-section atlas-roles-section">
-        <div className="section-heading narrow-heading">
-          <div className="eyebrow eyebrow-landing">
-            <span className="eyebrow-dot" />Built for team roles
-          </div>
-          <h2>Role-based access keeps the right people aligned without losing clarity.</h2>
+      <section id="roles" className="atlas-section atlas-access-section">
+        <div className="atlas-access-copy">
+          <div className="atlas-eyebrow"><span />Designed for team collaboration</div>
+          <h2>Clear roles. Space-aware access.</h2>
+          <p>Each role has a purpose, while Supabase row-level security applies access rules to workspace data. Space membership matters for member-only spaces.</p>
         </div>
-
-        <div className="role-pills" aria-label="Atlas roles">
-          {roles.map((role) => (
-            <span key={role} className="role-pill">
-              {role}
-            </span>
-          ))}
+        <div className="atlas-role-list">
+          {roles.map((role) => <div key={role.name} className="atlas-role-item"><span className="atlas-role-check"><Users size={15} /></span><span><strong>{role.name}</strong><small>{role.detail}</small></span><ArrowRight size={14} /></div>)}
         </div>
       </section>
 
-      <section className="atlas-section atlas-final-cta">
-        <div className="final-cta-panel">
-          <div>
-            <div className="eyebrow eyebrow-landing">
-              <span className="eyebrow-dot" />Ready to begin?
-            </div>
-            <h2>Keep your team’s knowledge organized, actionable, and trusted.</h2>
-          </div>
-          <button type="button" className="ui-button ui-button-primary" onClick={onOpenLogin}>
-            Open sign in
-          </button>
+      <section className="atlas-section atlas-final-section">
+        <div className="atlas-final-panel">
+          <div><div className="atlas-eyebrow atlas-eyebrow-light"><span />Your knowledge, together</div><h2>Give good knowledge a place to grow.</h2><p>Sign in to your Atlas workspace and pick up where your team left off.</p></div>
+          <button type="button" className="atlas-button atlas-button-light" onClick={onOpenLogin}>Sign in to Atlas <ArrowRight size={16} /></button>
         </div>
       </section>
+
+      <footer className="atlas-footer"><a className="atlas-brand atlas-footer-brand" href="#home"><span className="atlas-brand-mark"><BookOpenCheck size={17} /></span><span>atlas<span className="atlas-brand-period">.</span></span></a><span>Atlas Knowledge Workspace</span><a href="#home">Back to top ↑</a></footer>
     </main>
   )
 }
