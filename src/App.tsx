@@ -14,6 +14,7 @@ import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import { parseViewCount } from './utils/articleMetrics'
 import HelpCenter from './features/help/HelpCenter'
+import { LandingPage } from './features/marketing/LandingPage'
 import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, deleteTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
 
@@ -50,13 +51,14 @@ const routePaths: Record<View, string> = {
 
 function resolveAppPath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/') return { view: 'overview' as View, articleId: null, isLogin: true, isValid: true }
+  if (path === '/') return { view: 'overview' as View, articleId: null, isLogin: false, isLanding: true, isValid: true }
+  if (path === '/login') return { view: 'overview' as View, articleId: null, isLogin: true, isLanding: false, isValid: true }
 
   const articleMatch = path.match(/^\/articles\/([^/]+)$/)
-  if (articleMatch) return { view: 'article' as View, articleId: decodeURIComponent(articleMatch[1]), isLogin: false, isValid: true }
+  if (articleMatch) return { view: 'article' as View, articleId: decodeURIComponent(articleMatch[1]), isLogin: false, isLanding: false, isValid: true }
 
   const view = (Object.entries(routePaths).find(([key, route]) => key !== 'article' && key !== 'question' && route === path)?.[0] ?? null) as View | null
-  return { view: view ?? 'overview', articleId: null, isLogin: false, isValid: view !== null }
+  return { view: view ?? 'overview', articleId: null, isLogin: false, isLanding: false, isValid: view !== null }
 }
 
 const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadenceMonths: 6, notifyOwners: true, allowGuestQuestions: true, defaultArticleVisibility: 'Space members' }
@@ -89,6 +91,7 @@ function App() {
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<View>(() => resolveAppPath(window.location.pathname).view)
   const [isLoggedOut, setIsLoggedOut] = useState(true)
+  const [showLogin, setShowLogin] = useState(false)
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured)
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false)
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(false)
@@ -148,6 +151,10 @@ function App() {
     setSelectedArticleId(null)
     setActiveView(destination)
   }
+  const openLogin = () => {
+    window.history.pushState({}, '', '/login')
+    setShowLogin(true)
+  }
 
   useEffect(() => {
     if (isAuthLoading) return
@@ -158,12 +165,18 @@ function App() {
         return
       }
       if (isLoggedOut) {
-        if (window.location.pathname !== '/') window.history.replaceState({}, '', '/')
+        const loggedOutPath = window.location.pathname.replace(/\/+$/, '') || '/'
+        if (loggedOutPath === '/login') {
+          setShowLogin(true)
+          return
+        }
+        if (loggedOutPath !== '/') window.history.replaceState({}, '', '/')
+        setShowLogin(false)
         setActiveView('overview')
         setSelectedArticleId(null)
         return
       }
-      if (route.isLogin || !route.isValid || !roleViews[role].includes(route.view)) {
+      if (route.isLanding || route.isLogin || !route.isValid || !roleViews[role].includes(route.view)) {
         window.history.replaceState({}, '', '/dashboard')
         setActiveView('overview')
         setSelectedArticleId(null)
@@ -741,7 +754,10 @@ function App() {
   if (passwordSetupRequired) return <main className="signed-out-screen"><section className="signed-out-panel"><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">SECURE YOUR ACCOUNT</div><h1>Set your password.</h1><p>Choose a password before continuing to your workspace.</p><PasswordChangeForm requireCurrentPassword={false} submitLabel="Set password" onSave={savePassword} /></section></main>
 
   if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><p>Checking your session…</p></section></main>
-  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
+  if (isLoggedOut) {
+    if (!showLogin) return <LandingPage onOpenLogin={openLogin} />
+    return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><button type="button" className="auth-back-link" onClick={() => { window.history.pushState({}, '', '/'); setShowLogin(false) }}>&larr; Back to home</button><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
+  }
 
   return <div className="app-shell">
     <Sidebar activeView={effectiveView} onNavigate={navigateToView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
@@ -750,6 +766,7 @@ function App() {
         const { error } = await signOut()
         if (error) setResetNotice(error)
         setIsLoggedOut(true)
+        setShowLogin(false)
         setActiveView('overview')
         setSelectedArticleId(null)
         window.history.replaceState({}, '', '/')
