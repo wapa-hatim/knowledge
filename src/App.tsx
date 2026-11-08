@@ -14,8 +14,9 @@ import { KnowledgeModelsHub } from './features/knowledge/KnowledgeModelsHub'
 import { Button } from './components/ui/Button'
 import { parseViewCount } from './utils/articleMetrics'
 import HelpCenter from './features/help/HelpCenter'
-import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, deleteTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersion as saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, saveWorkspaceSettings as persistWorkspaceSettings, setArticleBookmark, signInWithEmail, signOut, supabase, uploadKnowledgeFile } from './lib/supabase'
+import { changeOwnPassword, createIntegrationRecord, createTaxonomyTerm, deleteArticleRecord, deleteSpaceRecord, deleteTaxonomyTerm, getCurrentWorkspaceRole, isSupabaseConfigured, loadArticleDetails, loadCoreWorkspaceData, loadKnowledgeHubData, loadQuestionData, loadSearchGaps, loadWorkspaceAdminData, loadWorkspaceSettings, manageWorkspaceUser, persistWorkspaceSettings, recordAuditEvent, recordSearchGap, resetPassword, saveArticleComment, saveArticleFeedback, saveArticleRecord, saveArticleVersionRecord, saveQuestionChanges, saveSpaceRecord, setArticleBookmark, signInWithEmail, signOut, uploadKnowledgeFile } from './lib/supabase'
 import type { Article, ArticleComment, ArticleStatus, ArticleVersion, AuditEvent, KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, KnowledgeQuestion, KnowledgeSpace, Role, View, WorkspaceSettings, WorkspaceUser } from './types'
+import LandingPage from './features/marketing/LandingPage'
 
 const ArticleDetail = lazy(() => import('./features/knowledge/ArticleDetail').then((module) => ({ default: module.ArticleDetail })))
 const SearchResults = lazy(() => import('./features/knowledge/SearchResults').then((module) => ({ default: module.SearchResults })))
@@ -50,13 +51,14 @@ const routePaths: Record<View, string> = {
 
 function resolveAppPath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/') return { view: 'overview' as View, articleId: null, isLogin: true, isValid: true }
+  if (path === '/') return { view: 'overview' as View, articleId: null, isLogin: false, isLanding: true, isValid: true }
+  if (path === '/login') return { view: 'overview' as View, articleId: null, isLogin: true, isLanding: false, isValid: true }
 
   const articleMatch = path.match(/^\/articles\/([^/]+)$/)
-  if (articleMatch) return { view: 'article' as View, articleId: decodeURIComponent(articleMatch[1]), isLogin: false, isValid: true }
+  if (articleMatch) return { view: 'article' as View, articleId: decodeURIComponent(articleMatch[1]), isLogin: false, isLanding: false, isValid: true }
 
   const view = (Object.entries(routePaths).find(([key, route]) => key !== 'article' && key !== 'question' && route === path)?.[0] ?? null) as View | null
-  return { view: view ?? 'overview', articleId: null, isLogin: false, isValid: view !== null }
+  return { view: view ?? 'overview', articleId: null, isLogin: false, isLanding: false, isValid: view !== null }
 }
 
 const defaultSettings: WorkspaceSettings = { reviewRequired: true, reviewCadenceMonths: 6, notifyOwners: true, allowGuestQuestions: true, defaultArticleVisibility: 'Space members' }
@@ -149,6 +151,18 @@ function App() {
     setActiveView(destination)
   }
 
+  const openLanding = () => {
+    window.history.pushState({}, '', '/')
+    setSelectedArticleId(null)
+    setActiveView('overview')
+  }
+
+  const goToLogin = () => {
+    window.history.pushState({}, '', '/login')
+    setSelectedArticleId(null)
+    setActiveView('overview')
+  }
+
   useEffect(() => {
     if (isAuthLoading) return
     const syncRoute = () => {
@@ -158,7 +172,12 @@ function App() {
         return
       }
       if (isLoggedOut) {
-        if (window.location.pathname !== '/') window.history.replaceState({}, '', '/')
+        if (route.isLanding) {
+          setActiveView('overview')
+          setSelectedArticleId(null)
+          return
+        }
+        if (window.location.pathname !== '/login') window.history.replaceState({}, '', '/login')
         setActiveView('overview')
         setSelectedArticleId(null)
         return
@@ -220,6 +239,7 @@ function App() {
         setIsLoggedOut(true)
         setPasswordSetupRequired(false)
         setIsAuthLoading(false)
+        if (window.location.pathname !== '/' && window.location.pathname !== '/login') window.history.replaceState({}, '', '/login')
         return
       }
 
@@ -234,6 +254,7 @@ function App() {
         setWorkspaceDataError(error ?? 'Your workspace profile could not be loaded.')
         setIsLoggedOut(true)
         setIsAuthLoading(false)
+        if (window.location.pathname !== '/' && window.location.pathname !== '/login') window.history.replaceState({}, '', '/login')
         return
       }
 
@@ -278,6 +299,7 @@ function App() {
       setIsLoggedOut(true)
       setWorkspaceDataError('Unable to load your Supabase session.')
       setIsAuthLoading(false)
+      if (window.location.pathname !== '/' && window.location.pathname !== '/login') window.history.replaceState({}, '', '/login')
     })
 
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
@@ -738,44 +760,40 @@ function App() {
   const searchGapsPageLoading = searchGapsLoading || Boolean(authUserId && !workspaceDataError && effectiveView === 'analytics' && !loadedSections.has('search-gaps'))
   const articlePageLoading = Boolean(authUserId && selectedArticle && selectedArticle.body === undefined)
 
-  if (passwordSetupRequired) return <main className="signed-out-screen"><section className="signed-out-panel"><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">SECURE YOUR ACCOUNT</div><h1>Set your password.</h1><p>Choose a password before continuing to your workspace.</p><PasswordChangeForm requireCurrentPassword={false} submitLabel="Set password" onSave={savePassword} /></section></main>
+  if (isLoggedOut && window.location.pathname === '/') return <LandingPage onOpenLogin={goToLogin} />
 
-  if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><p>Checking your session…</p></section></main>
-  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ATLAS KNOWLEDGE WORKSPACE</div><h1>Welcome back.</h1><p>Sign in with your organization account to continue.</p><label htmlFor="login-email">Work email</label><input id="login-email" type="email" autoComplete="username" placeholder="name@company.com" required disabled={isSubmittingLogin} /><label htmlFor="login-password">Password</label><div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required disabled={isSubmittingLogin} /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} disabled={isSubmittingLogin}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><div className="auth-actions"><button className="auth-utility-link" type="button" onClick={() => setPasswordResetOpen(true)} disabled={isSubmittingLogin}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? <><LoaderCircle className="auth-loading-spinner" size={15} />Signing in…</> : 'Sign in'}</Button>{resetNotice && <span className="auth-reset-note" role="alert">{resetNotice}</span>}</form><Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog logout-dialog"><div className="dialog-heading"><Dialog.Title>Reset your password</Dialog.Title><Dialog.Description>We’ll send a reset link to your work email so you can regain access.</Dialog.Description></div><form onSubmit={requestPasswordReset}><label htmlFor="reset-email">Work email</label><input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="name@company.com" required /><div className="dialog-actions"><Dialog.Close asChild><Button variant="ghost" type="button">Cancel</Button></Dialog.Close><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root></main>
+  if (passwordSetupRequired) return <main className="signed-out-screen"><section className="signed-out-panel"><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">ACCOUNT SETUP</div><h1>Set a secure password</h1><p>Choose a strong password to finish setting up your Atlas account.</p><PasswordChangeForm onSubmit={savePassword} isSetupMode /></section></main>
+
+  if (isAuthLoading) return <main className="signed-out-screen"><section className="signed-out-panel auth-loading-panel" role="status"><div className="brand-mark"><BookOpenText size={19} /></div><LoaderCircle className="auth-loading-spinner" size={20} /><div className="eyebrow">INITIALIZING</div><h1>Loading Atlas</h1><p>Checking your workspace and access…</p></section></main>
+
+  if (isLoggedOut) return <main className="signed-out-screen"><form className="signed-out-panel" onSubmit={submitLogin}><div className="brand-mark"><BookOpenText size={19} /></div><div className="eyebrow">WELCOME BACK</div><h1>Sign in to Atlas</h1><p>Use your workspace email and password to continue.</p><label htmlFor="login-email">Email<input id="login-email" type="email" placeholder="you@example.com" required /></label><label htmlFor="login-password">Password<div className="login-password-field"><input id="login-password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" required /><button type="button" className="password-visibility-button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label><div className="auth-actions"><button type="button" className="auth-utility-link" onClick={() => setPasswordResetOpen(true)}>Forgot password?</button></div><Button type="submit" disabled={isSubmittingLogin}>{isSubmittingLogin ? 'Signing in…' : 'Sign in'}</Button>{resetNotice && <div className="auth-reset-note" role="alert">{resetNotice}</div>}</form>{passwordResetOpen && <Dialog.Root open={passwordResetOpen} onOpenChange={setPasswordResetOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog"><div className="dialog-header"><div><div className="eyebrow">RESET PASSWORD</div><h2>Recover account access</h2></div><Dialog.Close asChild><button type="button" className="close-button" aria-label="Close password reset">×</button></Dialog.Close></div><form onSubmit={requestPasswordReset} className="password-change-form"><label htmlFor="reset-email">Email address<input id="reset-email" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="your@email.com" required /></label><div className="dialog-actions"><Button type="button" variant="secondary" onClick={() => setPasswordResetOpen(false)}>Cancel</Button><Button type="submit">Send reset link</Button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>}</main>
 
   return <div className="app-shell">
-    <Sidebar activeView={effectiveView} onNavigate={navigateToView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} selectedSpaceName={selectedSpaceName} onSelectSpace={setSelectedSpaceName} onOpenSpace={openSpace} onCreateSpace={openSpaceCreator} />
+    <Sidebar activeView={effectiveView} onNavigate={navigateToView} role={role} userName={currentUserName} spaces={spaces} reviewCount={articles.filter((article) => article.status === 'Under review').length} onLogout={async () => { const { error } = await signOut(); if (error) setResetNotice(error); setIsLoggedOut(true); setActiveView('overview'); setSelectedArticleId(null); window.history.replaceState({}, '', '/login') }} />
     <div className="app-main">
-      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => navigateToView('search')} onAskAtlas={() => navigateToView('questions')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onChangePassword={() => setPasswordDialogOpen(true)} onLogout={async () => {
-        const { error } = await signOut()
-        if (error) setResetNotice(error)
-        setIsLoggedOut(true)
-        setActiveView('overview')
-        setSelectedArticleId(null)
-        window.history.replaceState({}, '', '/')
-      }} />
-      <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Supabase request failed: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status"><LoaderCircle className="auth-loading-spinner" size={18} /> Loading workspace data…</div> : <Suspense fallback={<div className="page-loading" role="status">Loading workspace…</div>}>
-        {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={navigateToView} onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Knowledge library" description="Browse the documents, playbooks, and answers shared across your workspace." onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
-        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} canManageTaxonomy={role === 'Super Admin' || role === 'Space Admin'} onNavigate={navigateToView} onCreateArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onCreateAsset={() => setIsAssetOpen(true)} onCreateSource={() => setIsSourceOpen(true)} onAddTaxonomyTerm={addTaxonomyTerm} onRemoveTaxonomyTerm={removeTaxonomyTerm} />}
-        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with timely, thoughtful reviews." initialFilter="review" onNewArticle={() => openCreateForSpace(spaces[0]?.name ?? '')} onOpenArticle={openArticle} />}
+      <Topbar role={role} userName={currentUserName} activeView={effectiveView} search={search} onSearch={setSearch} onSearchSubmit={() => navigateToView('search')} onAskAtlas={() => navigateToView('help')} onAddKnowledge={() => setIsAddKnowledgeOpen(true)} onChangePassword={() => setPasswordDialogOpen(true)} onLogout={async () => { const { error } = await signOut(); if (error) setResetNotice(error); setIsLoggedOut(true); setActiveView('overview'); setSelectedArticleId(null); window.history.replaceState({}, '', '/login') }} />
+      <main className="page-content">{workspaceDataError && <div className="admin-data-error" role="alert">Supabase request failed: {workspaceDataError}</div>}{workspaceDataLoading ? <div className="page-loading" role="status">Loading workspace…</div> : <>
+        {effectiveView === 'overview' && <Dashboard role={role} userName={currentUserName} articles={visibleArticles} events={auditEvents} onNavigate={navigateToView} onNewArticle={() => setIsAddKnowledgeOpen(true)} />}
+        {effectiveView === 'library' && <KnowledgeTable articles={visibleArticles} role={role} currentUserName={currentUserName} title="Knowledge library" description="Browse the documents, playbooks, and reference knowledge that keep your team aligned." initialFilter="all" onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
+        {effectiveView === 'models' && <KnowledgeModelsHub models={knowledgeModels} loading={hubPageLoading} assets={knowledgeAssets} integrations={knowledgeIntegrations} taxonomyTerms={taxonomyTerms} onAddTaxonomyTerm={addTaxonomyTerm} onRemoveTaxonomyTerm={removeTaxonomyTerm} />}
+        {effectiveView === 'reviews' && <KnowledgeTable articles={visibleArticles.filter((article) => article.status === 'Under review')} role={role} currentUserName={currentUserName} title="Review queue" description="Keep trusted knowledge moving with the right review and approval flow." initialFilter="review" onNewArticle={() => setIsAddKnowledgeOpen(true)} onOpenArticle={openArticle} />}
         {effectiveView === 'search' && <SearchResults articles={articles} query={search} onQueryChange={setSearch} onOpenArticle={openArticle} onSaveZeroResult={saveZeroResult} />}
         {effectiveView === 'article' && articlePageLoading && <div className="page-loading" role="status">Loading article…</div>}
-        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} taxonomyTerms={taxonomyTerms} onBack={() => navigateToView('library')} onBookmark={() => toggleBookmark(selectedArticle.id)} onTagsChange={updateArticleTags} onAutosave={autosaveArticle} onSaveVersion={saveArticleVersion} onStatusChange={changeArticleStatus} onComment={addArticleComment} onFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
-        {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={setSelectedSpaceName} onCreateOpenChange={setIsSpaceCreateOpen} onOpenArticle={openArticle} onAddKnowledge={(spaceName) => { setCreateSpace(spaceName); setIsAddKnowledgeOpen(true) }} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
-        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsPageLoading} initialSpace={knowledgeSpaceContext} onQuestionsChange={changeQuestions} />}
+        {effectiveView === 'article' && selectedArticle && !articlePageLoading && <ArticleDetail article={selectedArticle} role={role} currentUserName={currentUserName} bookmarked={bookmarks.includes(selectedArticle.id)} onBookmark={() => toggleBookmark(selectedArticle.id)} onSave={autosaveArticle} onSaveVersion={saveArticleVersion} onUpdateTags={updateArticleTags} onChangeStatus={changeArticleStatus} onAddComment={addArticleComment} onAddFeedback={addArticleFeedback} onRestoreVersion={restoreArticleVersion} onDelete={removeArticle} />}
+        {effectiveView === 'spaces' && <SpacesView spaces={spaces} articles={articles} role={role} selectedSpaceName={selectedSpaceName} createOpen={isSpaceCreateOpen} onSelectSpace={openSpace} onCreateSpace={openSpaceCreator} onCreateArticle={openCreateForSpace} onSaveSpace={saveSpaceItem} onDeleteSpace={removeSpaceItem} />}
+        {effectiveView === 'questions' && <QuestionsView questions={questions} spaces={spaces} role={role} currentUserName={currentUserName} loading={questionsPageLoading} initialSpace={knowledgeSpaceContext} onChangeQuestions={changeQuestions} />}
         {effectiveView === 'help' && <HelpCenter onNavigate={navigateToView} />}
         {effectiveView === 'analytics' && <AnalyticsView articles={articles} role={role} currentUserName={currentUserName} zeroResultQueries={zeroResultQueries} loading={searchGapsPageLoading} />}
-        {effectiveView === 'people' && (adminPageLoading ? <div className="page-loading" role="status">Loading workspace members…</div> : <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
-        {effectiveView === 'settings' && (settingsPageLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
-        {effectiveView === 'audit' && (adminPageLoading ? <div className="page-loading" role="status">Loading audit events…</div> : <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={adminSpaces} usersLoading={false} usersError={adminDataError} settings={settings} onSettingsChange={changeWorkspaceSettings} onInvite={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
-      </Suspense>}</main>
+        {effectiveView === 'people' && (adminPageLoading ? <div className="page-loading" role="status">Loading workspace members…</div> : <AdminView mode="people" role={role} users={users} events={auditEvents} spaces={spaces} onInviteUser={inviteUser} onUpdateUser={updateUser} onSetUserStatus={setUserStatus} onDeleteUser={deleteUser} />)}
+        {effectiveView === 'settings' && (settingsPageLoading ? <div className="page-loading" role="status">Loading workspace settings…</div> : <AdminView mode="settings" role={role} users={users} events={auditEvents} spaces={spaces} settings={settings} onChangeSettings={changeWorkspaceSettings} />)}
+        {effectiveView === 'audit' && (adminPageLoading ? <div className="page-loading" role="status">Loading audit events…</div> : <AdminView mode="audit" role={role} users={users} events={auditEvents} spaces={spaces} />)}
+      </>}</main>
     </div>
     <CreateArticleDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onCreate={addArticle} author={currentUserName} spaces={spaces} initialSpace={createSpace} />
     <AddKnowledgeDialog open={isAddKnowledgeOpen} onOpenChange={setIsAddKnowledgeOpen} onSelect={handleKnowledgeAction} space={selectedSpaceName ?? createSpace ?? 'Engineering'} />
     <KnowledgeAssetDialog open={isAssetOpen} onOpenChange={setIsAssetOpen} onCreate={addKnowledgeAsset} spaces={spaces} initialSpace={knowledgeSpaceContext} />
     <KnowledgeSourceDialog open={isSourceOpen} onOpenChange={setIsSourceOpen} onCreate={addKnowledgeIntegration} initialSpace={knowledgeSpaceContext} />
-    <Dialog.Root open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog"><div className="dialog-heading"><Dialog.Title>Change your password</Dialog.Title><Dialog.Description>Enter your current password and choose a new one with at least 12 characters.</Dialog.Description></div><PasswordChangeForm requireCurrentPassword submitLabel="Save password" onSave={savePassword} onCancel={() => setPasswordDialogOpen(false)} /></Dialog.Content></Dialog.Portal></Dialog.Root>
+    <Dialog.Root open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="create-dialog"><div className="dialog-header"><div><div className="eyebrow">ACCOUNT</div><h2>Change password</h2></div><Dialog.Close asChild><button type="button" className="close-button" aria-label="Close password dialog">×</button></Dialog.Close></div><PasswordChangeForm onSubmit={savePassword} /></Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>
 }
 
@@ -786,12 +804,7 @@ function AnalyticsView({ articles, role, currentUserName, zeroResultQueries, loa
   }))
   const maxStatusCount = Math.max(1, ...statuses.map((status) => status.count))
   const totalViews = articles.reduce((total, article) => total + parseViewCount(article.views), 0)
-  return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and still looking for.</p></div><span className="date-filter">All recorded data</span></div>
-    <div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Article views</span><span className="metric-icon tone-blue"><FileText size={17} /></span></div><div className="metric-value">{totalViews.toLocaleString()}</div><div className="metric-delta">Sum of stored article views</div></article><article className="metric-card"><div className="metric-top"><span>Published articles</span><span className="metric-icon tone-mint"><BookOpenText size={17} /></span></div><div className="metric-value">{statuses[0].count}</div><div className="metric-delta">Current Supabase records</div></article><article className="metric-card"><div className="metric-top"><span>Recorded search gaps</span><span className="metric-icon tone-peach"><AlertCircle size={17} /></span></div><div className="metric-value">{zeroResultQueries.length}</div><div className="metric-delta">No-result searches in Supabase</div></article></div>
-    <div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="chart-legend"><i /> Articles</span></div><div className="bar-chart" aria-label="Current articles by status">{statuses.map((status) => <div className="chart-column" key={status.label}><span style={{ height: `${Math.max(4, status.count / maxStatusCount * 100)}%` }} /><small>{status.label}</small></div>)}</div></article>
-      <article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? 'Loading…' : `${zeroResultQueries.length} total`}</span></div>{loading ? <div className="empty-state">Loading search activity…</div> : zeroResultQueries.slice(0, 4).map((query) => <div className="gap-row" key={query}><span>{query}</span></div>)}{!loading && zeroResultQueries.length === 0 && <div className="empty-state">No recorded search gaps.</div>}</article></div>
-    <div className="section-title-row"><div><h2>Most viewed articles</h2><p>Content your team returns to most</p></div><span className="muted-count">{articles.length} tracked</span></div><KnowledgeTable articles={[...articles].sort((first, second) => parseViewCount(second.views) - parseViewCount(first.views)).slice(0, 4)} role={role} currentUserName={currentUserName} title="" description="" compact />
-  </section>
+  return <section className="page-section"><div className="page-heading"><div><div className="eyebrow">WORKSPACE INSIGHTS</div><h1>Knowledge analytics</h1><p>See what your team is learning, sharing, and revisiting most.</p></div></div><div className="metric-grid analytics-summary"><article className="metric-card"><div className="metric-top"><span>Articles</span><span className="metric-icon tone-green"><FileText size={14} /></span></div><strong>{articles.length}</strong><small>{articles.filter((article) => article.status === 'Published').length} published</small></article><article className="metric-card"><div className="metric-top"><span>Views</span><span className="metric-icon tone-blue"><FileText size={14} /></span></div><strong>{totalViews}</strong><small>Across the workspace</small></article><article className="metric-card"><div className="metric-top"><span>Review queue</span><span className="metric-icon tone-gold"><FileText size={14} /></span></div><strong>{articles.filter((article) => article.status === 'Under review').length}</strong><small>Awaiting approval</small></article><article className="metric-card"><div className="metric-top"><span>Questions</span><span className="metric-icon tone-purple"><FileText size={14} /></span></div><strong>{zeroResultQueries.length}</strong><small>Search gaps tracked</small></article></div><div className="analytics-grid"><article className="panel traffic-panel"><div className="panel-heading"><div><h2>Articles by status</h2><p>Current records in this workspace</p></div><span className="count-label">{articles.length}</span></div><div className="status-bars">{statuses.map((status) => <div key={status.label} className="status-row"><div className="status-label"><span>{status.label}</span><strong>{status.count}</strong></div><div className="status-bar"><span style={{ width: `${Math.max(10, (status.count / maxStatusCount) * 100)}%` }} /></div></div>)}</div></article><article className="panel search-gaps-panel"><div className="panel-heading"><div><h2>Search gaps</h2><p>Latest queries without a useful result</p></div><span className="count-label">{loading ? '…' : zeroResultQueries.length}</span></div>{loading ? <div className="page-loading small-loading" role="status">Loading search insights…</div> : zeroResultQueries.length ? <ul className="gap-list">{zeroResultQueries.slice(0, 5).map((query) => <li key={query}>{query}</li>)}</ul> : <div className="empty-state">No search gaps recorded yet.</div>}</article></div></section>
 }
 
 export default App
