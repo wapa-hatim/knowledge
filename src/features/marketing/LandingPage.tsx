@@ -12,6 +12,9 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
+import { MarketingLayout, type MarketingPage } from './MarketingLayout'
+import { FeaturesPage } from './FeaturesPage'
+import { SecurityPage } from './SecurityPage'
 import './landing-page.css'
 
 interface LandingPageProps {
@@ -84,65 +87,14 @@ const roles = [
   { icon: Users, tone: 'lp-fi-mint', title: 'Viewer', body: 'Read available knowledge and join allowed questions.' },
 ]
 
-export function LandingPage({ onOpenLogin }: LandingPageProps) {
-  const [scrolled, setScrolled] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
+function HomePage({ onOpenLogin, onNavigate }: { onOpenLogin: () => void; onNavigate: (page: MarketingPage) => void }) {
   const scrollTo = (id: string) => {
-    setMenuOpen(false)
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
-    <div className="lp-root">
-      <a className="lp-skip-link" href="#lp-overview">Skip to content</a>
-
-      <header className={`lp-header${scrolled ? ' is-scrolled' : ''}`}>
-        <div className="lp-brand">
-          <span className="lp-brand-mark"><BookOpenText size={19} /></span>
-          Atlas<span className="lp-brand-period">.</span>
-        </div>
-        <nav className="lp-nav" aria-label="Landing sections">
-          <a href="#lp-overview" onClick={(e) => { e.preventDefault(); scrollTo('lp-overview') }}>Overview</a>
-          <a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollTo('lp-features') }}>Features</a>
-          <a href="#lp-workflow" onClick={(e) => { e.preventDefault(); scrollTo('lp-workflow') }}>Workflow</a>
-          <a href="#lp-roles" onClick={(e) => { e.preventDefault(); scrollTo('lp-roles') }}>Roles</a>
-        </nav>
-        <div className="lp-header-actions">
-          <button type="button" className="lp-signin-link" onClick={onOpenLogin}>Sign in</button>
-          <button type="button" className="lp-enter-btn" onClick={onOpenLogin}>
-            Enter workspace <ArrowRight size={16} />
-          </button>
-          <button
-            type="button"
-            className="lp-menu-toggle"
-            aria-label="Toggle menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? '✕' : '☰'}
-          </button>
-        </div>
-      </header>
-
-      <div className={`lp-mobile-menu${menuOpen ? ' is-open' : ''}`}>
-        <a href="#lp-overview" onClick={(e) => { e.preventDefault(); scrollTo('lp-overview') }}>Overview</a>
-        <a href="#lp-features" onClick={(e) => { e.preventDefault(); scrollTo('lp-features') }}>Features</a>
-        <a href="#lp-workflow" onClick={(e) => { e.preventDefault(); scrollTo('lp-workflow') }}>Workflow</a>
-        <a href="#lp-roles" onClick={(e) => { e.preventDefault(); scrollTo('lp-roles') }}>Roles</a>
-        <button type="button" className="lp-enter-btn" onClick={() => { setMenuOpen(false); onOpenLogin() }}>
-          Enter workspace <ArrowRight size={16} />
-        </button>
-      </div>
-
+    <>
       <section className="lp-hero">
         <div className="lp-hero-inner">
           <div>
@@ -260,6 +212,11 @@ export function LandingPage({ onOpenLogin }: LandingPageProps) {
               </article>
             ))}
           </div>
+          <div className="lp-section-action">
+            <button type="button" className="lp-btn-secondary" onClick={() => onNavigate('features')}>
+              Explore all features <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
       </section>
 
@@ -300,6 +257,11 @@ export function LandingPage({ onOpenLogin }: LandingPageProps) {
               </article>
             ))}
           </div>
+          <div className="lp-section-action">
+            <button type="button" className="lp-btn-secondary" onClick={() => onNavigate('security')}>
+              Learn how access control works <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
       </section>
 
@@ -315,17 +277,39 @@ export function LandingPage({ onOpenLogin }: LandingPageProps) {
           </div>
         </div>
       </section>
+    </>
+  )
+}
 
-      <footer className="lp-footer">
-        <div className="lp-footer-inner">
-          <div className="lp-footer-brand">
-            <span className="lp-brand-mark"><BookOpenText size={15} /></span>
-            Atlas<span className="lp-brand-period">.</span>
-          </div>
-          <span className="lp-footer-copy">A shared knowledge workspace for teams.</span>
-        </div>
-      </footer>
-    </div>
+export function LandingPage({ onOpenLogin }: LandingPageProps) {
+  const [page, setPage] = useState<MarketingPage>('home')
+
+  const navigate = (next: MarketingPage) => {
+    const path = next === 'home' ? '/' : `/${next}`
+    window.history.pushState({}, '', path)
+    setPage(next)
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
+  useEffect(() => {
+    const onPop = () => {
+      const raw = window.location.pathname.replace(/\/+$/, '') || '/'
+      if (raw === '/features') setPage('features')
+      else if (raw === '/security') setPage('security')
+      else setPage('home')
+    }
+    onPop()
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  if (page === 'features') return <FeaturesPage onOpenLogin={onOpenLogin} onNavigate={navigate} />
+  if (page === 'security') return <SecurityPage onOpenLogin={onOpenLogin} onNavigate={navigate} />
+
+  return (
+    <MarketingLayout activePage="home" onOpenLogin={onOpenLogin} onNavigate={navigate}>
+      <HomePage onOpenLogin={onOpenLogin} onNavigate={navigate} />
+    </MarketingLayout>
   )
 }
 
