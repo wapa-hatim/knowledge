@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpenText, Braces, CheckCircle2, CircleHelp, FileArchive, FileUp, Layers3, LoaderCircle, Network, Plus, SearchCheck, ShieldCheck, Tags, Trash2 } from 'lucide-react'
+import { ArrowRight, BookOpenText, CheckCircle2, FileArchive, FileUp, Layers3, LoaderCircle, Network, Plus, SearchCheck, ShieldCheck, Tags, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { KnowledgeAsset, KnowledgeIntegration, KnowledgeModel, View } from '../../types'
 import { Button } from '../../components/ui/Button'
@@ -23,8 +23,8 @@ const knowledgeTypes = [
   { title: 'Structured content', detail: 'Articles, SOPs, FAQs, specs', icon: BookOpenText, tone: 'tone-mint', action: 'Create document' },
   { title: 'Unstructured assets', detail: 'PDFs, video, audio, diagrams', icon: FileArchive, tone: 'tone-blue', action: 'Upload asset' },
   { title: 'Explicit metadata', detail: 'Taxonomies, entities, tags', icon: Tags, tone: 'tone-peach', action: 'Manage taxonomy' },
-  { title: 'Tacit knowledge', detail: 'Questions and verified answers', icon: CircleHelp, tone: 'tone-lilac', action: 'Open Q&A' },
-  { title: 'Dynamic data', detail: 'API specs and release feeds', icon: Braces, tone: 'tone-blue', action: 'Connect source' },
+  // { title: 'Tacit knowledge', detail: 'Questions and verified answers', icon: CircleHelp, tone: 'tone-lilac', action: 'Open Q&A' },
+  // { title: 'Dynamic data', detail: 'API specs and release feeds', icon: Braces, tone: 'tone-blue', action: 'Connect source' },
 ]
 
 export function KnowledgeModelsHub({ models, loading, assets, integrations, taxonomyTerms, canManageTaxonomy, onNavigate, onCreateArticle, onCreateAsset, onCreateSource, onAddTaxonomyTerm, onRemoveTaxonomyTerm }: KnowledgeModelsHubProps) {
